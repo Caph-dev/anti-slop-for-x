@@ -1,0 +1,11 @@
+{
+  "name": "slop-shield-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "node --watch src/server.mjs",
+    "cf:dev": "echo \"CF deploy later; use npm start for local mock\" && node src/server.mjs"
+  }
+}

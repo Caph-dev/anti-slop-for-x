@@ -1,0 +1,25 @@
+{
+  "name": "slop-shield",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Detect and fold AI-slop / bot replies on X (x.com)",
+  "workspaces": [
+    "extension",
+    "worker"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w extension",
+    "build": "npm run build -w extension",
+    "zip": "npm run zip -w extension",
+    "test": "npm run test -w extension",
+    "typecheck": "npm run typecheck -w extension",
+    "worker:dev": "npm run dev -w worker",
+    "worker:start": "npm run start -w worker"
+  },
+  "author": "Caph-dev",
+  "license": "MIT",
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.27.7": true
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "extName": { "message": "Slop Shield" },
+  "extDescription": {
+    "message": "Detect and fold AI-slop / bot replies on X. Local prefilter + optional decision model via your Worker proxy."
+  }
+}

@@ -1,0 +1,7 @@
+# Scaffold for later Cloudflare deploy. v1 uses local Node mock (src/server.mjs).
+name = "slop-shield-proxy"
+main = "src/cf-worker.ts"
+compatibility_date = "2026-10-01"
+
+# Do NOT put real API keys here. Prefer Authorization from the extension request.
+# Optional later: [vars] and secrets via `wrangler secret put`

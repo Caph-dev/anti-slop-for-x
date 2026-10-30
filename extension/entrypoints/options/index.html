@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Slop Shield</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header>
+        <h1 data-i18n="optionsTitle">Slop Shield</h1>
+        <p class="sub" data-i18n="optionsSubtitle">Fold AI-slop / bot replies on X</p>
+      </header>
+
+      <section class="card">
+        <h2 data-i18n="sectionBehavior">Behavior</h2>
+        <label class="row"><input type="checkbox" id="enabled" /> <span data-i18n="enabled">Enable</span></label>
+        <label class="row"><input type="checkbox" id="autoScan" /> <span data-i18n="autoScan">Auto-scan</span></label>
+        <label class="row"><input type="checkbox" id="prefilterOnly" /> <span data-i18n="prefilterOnly">Prefilter only (skip model)</span></label>
+        <label class="row"><input type="checkbox" id="skipShortText" /> <span data-i18n="skipShortText">Skip short text</span></label>
+        <label class="row"><input type="checkbox" id="skipOwnPosts" /> <span data-i18n="skipOwnPosts">Skip own posts</span></label>
+
+        <label class="field">
+          <span data-i18n="scanScope">Scan scope</span>
+          <select id="scanScope">
+            <option value="replies-only" data-i18n="scopeReplies">Replies only</option>
+            <option value="timeline-and-replies" data-i18n="scopeAll">Timeline + replies</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span data-i18n="threshold">Fold threshold (<span id="thresholdVal">0.55</span>)</span>
+          <input type="range" id="threshold" min="0.15" max="0.95" step="0.01" />
+        </label>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="sectionModel">Decision model</h2>
+        <label class="field">
+          <span data-i18n="protocol">Protocol</span>
+          <select id="protocol">
+            <option value="jev">TypeSafe / Jev (noul/choice/score)</option>
+            <option value="openai-decisions">OpenAI Decisions (predicate/choice/score)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="workerBaseUrl">Worker base URL (proxy)</span>
+          <input type="url" id="workerBaseUrl" placeholder="http://127.0.0.1:8787" />
+        </label>
+        <label class="field">
+          <span data-i18n="upstreamBaseUrl">Upstream base URL</span>
+          <input type="url" id="upstreamBaseUrl" placeholder="https://ai.caph.me/v1" />
+        </label>
+        <label class="field">
+          <span data-i18n="upstreamPath">Decisions path (optional)</span>
+          <input type="text" id="upstreamPath" placeholder="/systemone or /decisions" />
+        </label>
+        <label class="field">
+          <span data-i18n="model">Model</span>
+          <input type="text" id="model" placeholder="jev-latest" />
+        </label>
+        <label class="field">
+          <span data-i18n="apiKey">API key (stored in extension only)</span>
+          <input type="password" id="apiKey" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span data-i18n="defaultPrompt">Default prompt</span>
+          <textarea id="defaultPrompt" rows="2"></textarea>
+        </label>
+        <p class="hint" data-i18n="keyHint">
+          The API key stays in chrome.storage.local. The Worker is a CORS-safe proxy and forwards your Authorization header. Do not put the real key in the Worker repo.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="sectionWhitelist">Account whitelist</h2>
+        <label class="field">
+          <span data-i18n="whitelistHelp">Handles (one per line, without @)</span>
+          <textarea id="accountWhitelist" rows="4" placeholder="handle1&#10;handle2"></textarea>
+        </label>
+      </section>
+
+      <footer class="actions">
+        <button type="button" id="save" class="primary" data-i18n="save">Save</button>
+        <button type="button" id="test" data-i18n="testProxy">Test proxy</button>
+        <span id="status" role="status"></span>
+      </footer>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
