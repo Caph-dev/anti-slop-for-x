@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Local mock / proxy for slop-shield.
+ * Local mock / proxy for Anti Slop for X.
  * Extension → this server → upstream (ai.caph.me etc.) with Authorization from the request.
  * No API keys stored here. Cloudflare Worker deploy comes later (see cf-worker.ts).
  */
@@ -102,7 +102,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[slop-shield-worker] local mock listening on http://${HOST}:${PORT}`);
+  console.log(`[anti-slop-for-x-worker] local mock listening on http://${HOST}:${PORT}`);
   console.log(`  GET  /health`);
   console.log(`  POST /v1/decide  (forwards Authorization + payload to upstream)`);
 });

@@ -17,7 +17,7 @@ export interface Env {
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Slop-Shield-Token',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Anti-Slop-Token',
 };
 
 function json(data: unknown, status = 200): Response {
@@ -38,7 +38,7 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/v1/decide') {
       const auth = request.headers.get('Authorization') || '';
-      const extToken = request.headers.get('X-Slop-Shield-Token');
+      const extToken = request.headers.get('X-Anti-Slop-Token');
 
       // Mode B optional gate
       if (env.EXTENSION_TOKEN && extToken !== env.EXTENSION_TOKEN) {

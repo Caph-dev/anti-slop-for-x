@@ -1,11 +1,11 @@
-# Privacy Policy (draft) — Slop Shield
+# Privacy Policy (draft) — Anti Slop for X
 
 **Status:** draft for self-use / future Chrome Web Store listing.  
 **Last updated:** 2026-10-30 (Asia/Shanghai)
 
 ## What the extension does
 
-Slop Shield runs in your browser on `x.com` / `twitter.com`. It reads the text, handle, and timestamps of posts/replies **already visible in your tab**, scores them with a local keyword prefilter, and optionally sends text to a **decision model through a Worker you control**.
+Anti Slop for X runs in your browser on `x.com` / `twitter.com`. It reads the text, handle, and timestamps of posts/replies **already visible in your tab**, scores them with a local keyword prefilter, and optionally sends text to a **decision model through a Worker you control**.
 
 ## Data we collect
 
@@ -28,4 +28,4 @@ The extension authors do **not** operate a telemetry backend in v1.
 
 ## Contact
 
-Maintainer: Caph-dev (temporary project name: slop-shield).
+Maintainer: Caph-dev (Anti Slop for X).

@@ -37,7 +37,7 @@ async function boot() {
   });
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === 'SLOP_SHIELD_SCAN_NOW') {
+    if (msg?.type === 'ANTI_SLOP_SCAN_NOW') {
       void scanVisible(true).then(() => sendResponse({ ok: true }));
       return true;
     }
@@ -127,7 +127,7 @@ async function boot() {
   if (settings.autoScan) void scanVisible(false);
 
   // Expose for manual debug
-  (globalThis as unknown as { __slopShieldScan?: () => void }).__slopShieldScan = () => {
+  (globalThis as unknown as { __antiSlopScan?: () => void }).__antiSlopScan = () => {
     for (const tweet of listTweets()) clearMounted(tweet.el);
     void scanVisible(true);
   };

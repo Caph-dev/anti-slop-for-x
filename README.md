@@ -1,4 +1,4 @@
-# Slop Shield（临时名）
+# Anti Slop for X
 
 在 X（x.com）上检测 AI 注水 / 机器人回复：本地关键词预筛 +（可选）决策模型；超过阈值则折叠并显示分数/原因；**Mute / Block 仅在你点击时触发**。扩展只与自有 Worker 代理通信，不直连上游模型 API。
 
@@ -7,7 +7,7 @@
 ## 目录结构
 
 ```
-slop-shield/
+anti-slop-for-x/
   extension/   # WXT + TypeScript，Chrome MV3
   worker/      # 本地 Node mock 代理（CF Worker 脚手架稍后部署）
   docs/        # 隐私政策草稿、架构说明
@@ -18,7 +18,7 @@ slop-shield/
 1. 安装依赖并构建：
 
 ```bash
-cd /workspace/slop-shield
+cd anti-slop-for-x
 npm install
 npm run build
 ```
@@ -60,8 +60,10 @@ npm run worker:start
 
 先启动 Worker，再（**不要把 key 写进仓库**）：
 
+密钥文件不在仓库里。若你还留着临时名时期的 `~/.config/slop-shield-jev.env`，改名为下面这个路径，或继续 source 旧文件即可（见 [CHANGELOG](CHANGELOG.md)）。
+
 ```bash
-set -a; source ~/.config/slop-shield-jev.env; set +a
+set -a; source ~/.config/anti-slop-for-x-jev.env; set +a
 
 curl -sS http://127.0.0.1:8787/health
 

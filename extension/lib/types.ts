@@ -1,4 +1,4 @@
-/** Shared types for slop-shield */
+/** Shared types for Anti Slop for X */
 
 export type ProtocolType = 'jev' | 'openai-decisions';
 
