@@ -2,37 +2,37 @@
 
 import type { DecisionResult } from './types';
 
-const ROOT_ATTR = 'data-slop-shield';
-const FOLDED_CLASS = 'slop-shield-folded';
-const STYLE_ID = 'slop-shield-styles';
+const ROOT_ATTR = 'data-anti-slop';
+const FOLDED_CLASS = 'anti-slop-folded';
+const STYLE_ID = 'anti-slop-styles';
 
 export function ensureStyles(): void {
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
-.${FOLDED_CLASS} > *:not(.slop-shield-bar) { display: none !important; }
-.slop-shield-bar {
+.${FOLDED_CLASS} > *:not(.anti-slop-bar) { display: none !important; }
+.anti-slop-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   padding: 10px 12px; margin: 4px 0; border-radius: 12px;
   background: rgba(120,120,120,0.12); font-size: 13px; line-height: 1.3;
   color: inherit; font-family: system-ui, -apple-system, sans-serif;
 }
-.slop-shield-bar .ss-score { font-weight: 600; opacity: 0.9; }
-.slop-shield-bar .ss-reason { opacity: 0.7; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slop-shield-bar button {
+.anti-slop-bar .ss-score { font-weight: 600; opacity: 0.9; }
+.anti-slop-bar .ss-reason { opacity: 0.7; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anti-slop-bar button {
   border: 1px solid rgba(127,127,127,0.4); background: transparent; color: inherit;
   border-radius: 999px; padding: 4px 10px; cursor: pointer; font-size: 12px;
 }
-.slop-shield-bar button:hover { background: rgba(127,127,127,0.15); }
-.slop-shield-bar button.ss-danger:hover { border-color: #f4212e; color: #f4212e; }
-.slop-shield-badge {
+.anti-slop-bar button:hover { background: rgba(127,127,127,0.15); }
+.anti-slop-bar button.ss-danger:hover { border-color: #f4212e; color: #f4212e; }
+.anti-slop-badge {
   display: inline-flex; align-items: center; gap: 4px;
   margin-left: 8px; padding: 1px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 600;
   background: rgba(244, 33, 46, 0.12); color: #f4212e;
 }
-.slop-shield-badge.ss-warn { background: rgba(255, 173, 31, 0.18); color: #cc8b00; }
+.anti-slop-badge.ss-warn { background: rgba(255, 173, 31, 0.18); color: #cc8b00; }
 `;
   document.documentElement.appendChild(style);
 }
@@ -54,8 +54,8 @@ export function mountResult(
   article.setAttribute(ROOT_ATTR, '1');
 
   // Remove previous bar
-  article.querySelectorAll('.slop-shield-bar').forEach((n) => n.remove());
-  article.querySelectorAll('.slop-shield-badge').forEach((n) => n.remove());
+  article.querySelectorAll('.anti-slop-bar').forEach((n) => n.remove());
+  article.querySelectorAll('.anti-slop-badge').forEach((n) => n.remove());
   article.classList.remove(FOLDED_CLASS);
 
   const pct = Math.round(result.score * 100);
@@ -64,7 +64,7 @@ export function mountResult(
   if (fold) {
     article.classList.add(FOLDED_CLASS);
     const bar = document.createElement('div');
-    bar.className = 'slop-shield-bar';
+    bar.className = 'anti-slop-bar';
     bar.innerHTML = `
       <span class="ss-score">${t('foldedLabel')} ${pct}%</span>
       <span class="ss-reason" title="${escapeAttr(result.reason)}">${escapeHtml(result.reason)}</span>
@@ -86,7 +86,7 @@ export function mountResult(
   } else if (result.score >= threshold * 0.7 && result.source !== 'skipped') {
     // Soft badge without fold
     const badge = document.createElement('span');
-    badge.className = 'slop-shield-badge ss-warn';
+    badge.className = 'anti-slop-badge ss-warn';
     badge.textContent = `AI? ${pct}%`;
     badge.title = result.reason;
     const nameRow = article.querySelector('[data-testid="User-Name"]');
@@ -95,7 +95,7 @@ export function mountResult(
     // Still offer mute/block via small bar? Keep minimal: only when folded for v1 mute/block prominence
     // Add tiny action buttons next to badge for borderline
     const actions = document.createElement('div');
-    actions.className = 'slop-shield-bar';
+    actions.className = 'anti-slop-bar';
     actions.style.padding = '4px 8px';
     actions.innerHTML = `
       <button type="button" data-act="mute">${t('mute')}</button>
@@ -128,5 +128,5 @@ export function alreadyMounted(article: HTMLElement): boolean {
 export function clearMounted(article: HTMLElement): void {
   article.removeAttribute(ROOT_ATTR);
   article.classList.remove(FOLDED_CLASS);
-  article.querySelectorAll('.slop-shield-bar, .slop-shield-badge').forEach((n) => n.remove());
+  article.querySelectorAll('.anti-slop-bar, .anti-slop-badge').forEach((n) => n.remove());
 }

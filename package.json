@@ -1,5 +1,5 @@
 {
-  "name": "slop-shield",
+  "name": "anti-slop-for-x",
   "private": true,
   "version": "0.1.0",
   "description": "Detect and fold AI-slop / bot replies on X (x.com)",

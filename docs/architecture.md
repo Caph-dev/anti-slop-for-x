@@ -14,7 +14,7 @@
 
 **Preferred (v1):** API key in extension storage → `Authorization: Bearer …` on `/v1/decide` → Worker forwards unchanged. Worker repo holds no secrets.
 
-**Alternative (later CF):** Worker secret `UPSTREAM_API_KEY` + extension sends `X-Slop-Shield-Token` validated against `EXTENSION_TOKEN`.
+**Alternative (later CF):** Worker secret `UPSTREAM_API_KEY` + extension sends `X-Anti-Slop-Token` validated against `EXTENSION_TOKEN`.
 
 ## Local mock vs Cloudflare
 

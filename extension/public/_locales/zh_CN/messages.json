@@ -1,5 +1,5 @@
 {
-  "extName": { "message": "Slop Shield" },
+  "extName": { "message": "Anti Slop for X" },
   "extDescription": {
     "message": "检测并折叠 X 上的 AI 注水 / 机器人回复。本地预筛 + 可选决策模型（经自有 Worker 代理）。"
   }

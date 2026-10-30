@@ -9,7 +9,7 @@ async function callModel(post: PostExtract, settings: Settings): Promise<unknown
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
       const resp = await chrome.runtime.sendMessage({
-        type: 'SLOP_SHIELD_DECIDE',
+        type: 'ANTI_SLOP_DECIDE',
         post,
         settings,
       });

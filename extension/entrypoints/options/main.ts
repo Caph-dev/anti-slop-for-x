@@ -3,7 +3,7 @@ import { loadSettings, saveSettings } from '../../lib/settings';
 
 const STR: Record<string, Record<string, string>> = {
   en: {
-    optionsTitle: 'Slop Shield',
+    optionsTitle: 'Anti Slop for X',
     optionsSubtitle: 'Fold AI-slop / bot replies on X',
     sectionBehavior: 'Behavior',
     enabled: 'Enable',
@@ -34,7 +34,7 @@ const STR: Record<string, Record<string, string>> = {
     testFail: 'Proxy failed',
   },
   zh: {
-    optionsTitle: 'Slop Shield',
+    optionsTitle: 'Anti Slop for X',
     optionsSubtitle: '折叠 X 上的 AI 注水 / 机器人回复',
     sectionBehavior: '行为',
     enabled: '启用',

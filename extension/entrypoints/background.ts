@@ -11,18 +11,18 @@ export default defineBackground(() => {
   chrome.action.onClicked.addListener(async (tab) => {
     if (!tab.id) return;
     try {
-      await chrome.tabs.sendMessage(tab.id, { type: 'SLOP_SHIELD_SCAN_NOW' });
+      await chrome.tabs.sendMessage(tab.id, { type: 'ANTI_SLOP_SCAN_NOW' });
     } catch {
       await chrome.runtime.openOptionsPage();
     }
   });
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === 'SLOP_SHIELD_GET_SETTINGS') {
+    if (msg?.type === 'ANTI_SLOP_GET_SETTINGS') {
       void loadSettings().then((s) => sendResponse({ settings: s }));
       return true;
     }
-    if (msg?.type === 'SLOP_SHIELD_DECIDE') {
+    if (msg?.type === 'ANTI_SLOP_DECIDE') {
       void (async () => {
         try {
           const settings = (msg.settings as Settings) || (await loadSettings());
