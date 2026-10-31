@@ -38,7 +38,9 @@ async function boot() {
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'ANTI_SLOP_SCAN_NOW') {
-      void scanVisible(true).then(() => sendResponse({ ok: true }));
+      void scanVisible(true)
+        .then((scanned) => sendResponse({ ok: true, scanned }))
+        .catch((e: unknown) => sendResponse({ ok: false, error: String(e) }));
       return true;
     }
     return false;
@@ -66,13 +68,14 @@ async function boot() {
     };
   }
 
-  async function handleArticle(el: HTMLElement, force = false) {
-    if (!settings.enabled) return;
-    if (!force && (processed.has(el) || alreadyMounted(el))) return;
-    if (!isInViewport(el) && !force) return;
+  /** Returns true when the post was actually scored and rendered. */
+  async function handleArticle(el: HTMLElement, force = false): Promise<boolean> {
+    if (!settings.enabled) return false;
+    if (!force && (processed.has(el) || alreadyMounted(el))) return false;
+    if (!isInViewport(el) && !force) return false;
 
     const post = await toExtract(el);
-    if (!post) return;
+    if (!post) return false;
     processed.add(el);
 
     const result = await limiter.run(() => scorePost(post, settings));
@@ -89,14 +92,15 @@ async function boot() {
         });
       },
     }, t);
+    return true;
   }
 
-  async function scanVisible(force = false) {
-    if (!settings.enabled) return;
-    if (!settings.autoScan && !force) return;
-    for (const tweet of listTweets()) {
-      void handleArticle(tweet.el, force);
-    }
+  /** Returns how many posts were actually scored, so the popup can report it. */
+  async function scanVisible(force = false): Promise<number> {
+    if (!settings.enabled) return 0;
+    if (!settings.autoScan && !force) return 0;
+    const results = await Promise.all(listTweets().map((tweet) => handleArticle(tweet.el, force)));
+    return results.filter(Boolean).length;
   }
 
   const mo = new MutationObserver(() => {

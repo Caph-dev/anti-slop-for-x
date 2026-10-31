@@ -8,14 +8,9 @@ export default defineBackground(() => {
     void loadSettings();
   });
 
-  chrome.action.onClicked.addListener(async (tab) => {
-    if (!tab.id) return;
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: 'ANTI_SLOP_SCAN_NOW' });
-    } catch {
-      await chrome.runtime.openOptionsPage();
-    }
-  });
+  // The toolbar icon opens the popup entrypoint (entrypoints/popup), which
+  // offers "Scan current page" and "Options". Chrome does not fire
+  // action.onClicked while a default_popup is set, so there is no listener here.
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'ANTI_SLOP_GET_SETTINGS') {

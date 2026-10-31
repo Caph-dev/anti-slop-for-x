@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.2 — 2026-10-31
+
+工具栏图标从「静默扫描」改为显式面板。
+The toolbar icon goes from a silent scan to an explicit popup.
+
+
+- 工具栏图标改为弹出面板（`extension/entrypoints/popup`）：显示端点/模型/范围/状态摘要，提供「扫描当前页」与「选项」两个入口；扫描结束后回报处理条数，扫不到时说明原因。
+- The toolbar icon now opens a popup showing endpoint/model/scope/status plus "Scan current page" and "Options"; scans report how many posts were scored and explain when there was nothing to scan.
+- 移除 `background.ts` 的 `chrome.action.onClicked`（有 `default_popup` 后 Chrome 不再触发它）。旧行为是「点击即扫描且无反馈」，在 `/home` 上因为默认 `scanScope: replies-only` 跳过所有主帖，看起来像完全没反应。
+- Removed `chrome.action.onClicked`; the old behaviour scanned silently and, on `/home`, skipped every non-reply because of the default `scanScope: replies-only`, which looked like a dead button.
+- `scanVisible()` 现在返回实际打分的条数，`handleArticle()` 返回是否处理；content script 的 `ANTI_SLOP_SCAN_NOW` 响应带上 `scanned` 计数。
+- `scanVisible()` now returns the number of posts scored and the content script replies with that count.
+
 ## 0.3.1 — 2026-10-31
 
 OpenAI Decisions 预设从「契约未验证」转为已验证；选项页去掉多余提示文本。
