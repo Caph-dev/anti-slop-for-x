@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — 2026-10-31
+
+修复折叠卡片与被折叠推文并排显示的布局 bug，以及 badge 模式下游离的动作条。
+Fixed the folded card rendering beside the tweet it folded, and the stray action bar in badge mode.
+
+- 修复折叠卡片与被折叠推文并排显示的布局 bug。`article[data-testid="tweet"]` 在 X 上是 `display:flex; flex-direction:row`（头像列 + 内容列），`article.prepend(bar)` 让折叠卡成了横向 flex 项，把正文挤到右侧。现在折叠时直接对 `article` 设 `display:block` 并用内联样式隐藏它的子节点，不再依赖可能被 React 重写的 class。
+- Fixed the folded card rendering side by side with the tweet. X's tweet article is a flex row (avatar column + content column), so prepending the fold card made it a horizontal sibling that squeezed the body. Folding now forces the article to block layout and hides its children with inline styles, tracked per tweet so Expand/unmount restore the exact original values.
+- 修复 badge 模式下「静音/屏蔽」小按钮条飘在推文右侧、盖住操作行的问题：badge 现在只显示百分比标记，不再额外挂动作条（静音/屏蔽仍可从折叠卡和 X 原生菜单进入）。
+- Fixed the borderline badge's stray mute/block bar being flex-positioned at the right edge over the action row; the badge is now passive.
+
 ## 0.3.2 — 2026-10-31
 
 工具栏图标从「静默扫描」改为显式面板。

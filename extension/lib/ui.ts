@@ -43,6 +43,43 @@ export interface UiHandlers {
   onBlock: () => void;
 }
 
+/**
+ * Fold state per tweet, so Expand / unmount can restore the exact inline styles
+ * we overwrote. A tweet article on X is `display:flex; flex-direction:row`
+ * (avatar column + content column), so inserting a block into it lays out
+ * sideways and squeezes the content; we override the article and hide its
+ * children directly instead of relying on a class React may rewrite.
+ */
+interface FoldState {
+  bar: HTMLDivElement;
+  articleDisplay: string;
+  hidden: Array<{ el: HTMLElement; display: string }>;
+}
+
+const folds = new WeakMap<HTMLElement, FoldState>();
+
+function collapseArticle(article: HTMLElement, bar: HTMLDivElement): void {
+  const hidden: FoldState['hidden'] = [];
+  for (const child of Array.from(article.children)) {
+    if (child === bar) continue;
+    const el = child as HTMLElement;
+    hidden.push({ el, display: el.style.display });
+    el.style.display = 'none';
+  }
+  const articleDisplay = article.style.display;
+  article.style.display = 'block';
+  folds.set(article, { bar, articleDisplay, hidden });
+}
+
+function restoreArticle(article: HTMLElement): void {
+  const state = folds.get(article);
+  if (!state) return;
+  for (const { el, display } of state.hidden) el.style.display = display;
+  article.style.display = state.articleDisplay;
+  state.bar.remove();
+  folds.delete(article);
+}
+
 export function mountResult(
   article: HTMLElement,
   result: DecisionResult,
@@ -52,10 +89,9 @@ export function mountResult(
 ): void {
   ensureStyles();
   article.setAttribute(ROOT_ATTR, '1');
-
-  // Remove previous bar
-  article.querySelectorAll('.anti-slop-bar').forEach((n) => n.remove());
-  article.querySelectorAll('.anti-slop-badge').forEach((n) => n.remove());
+  restoreArticle(article);
+  // Drop anything left by an earlier mount (e.g. after an extension reload).
+  article.querySelectorAll('.anti-slop-bar, .anti-slop-badge').forEach((n) => n.remove());
   article.classList.remove(FOLDED_CLASS);
 
   const pct = Math.round(result.score * 100);
@@ -65,6 +101,8 @@ export function mountResult(
     article.classList.add(FOLDED_CLASS);
     const bar = document.createElement('div');
     bar.className = 'anti-slop-bar';
+    bar.style.width = '100%';
+    bar.style.boxSizing = 'border-box';
     bar.innerHTML = `
       <span class="ss-score">${t('foldedLabel')} ${pct}%</span>
       <span class="ss-reason" title="${escapeAttr(result.reason)}">${escapeHtml(result.reason)}</span>
@@ -78,37 +116,23 @@ export function mountResult(
       const act = btn.getAttribute('data-act');
       if (act === 'expand') {
         article.classList.remove(FOLDED_CLASS);
+        restoreArticle(article);
         handlers.onExpand();
       } else if (act === 'mute') handlers.onMute();
       else if (act === 'block') handlers.onBlock();
     });
     article.prepend(bar);
+    collapseArticle(article, bar);
   } else if (result.score >= threshold * 0.7 && result.source !== 'skipped') {
-    // Soft badge without fold
+    // Soft badge only: the muted action bar used to be appended to the article,
+    // where the flex row pushed it to the right edge on top of the action row.
+    // Mute / Block stay available from the fold card and X's own menu.
     const badge = document.createElement('span');
     badge.className = 'anti-slop-badge ss-warn';
     badge.textContent = `AI? ${pct}%`;
     badge.title = result.reason;
     const nameRow = article.querySelector('[data-testid="User-Name"]');
     (nameRow || article).appendChild(badge);
-
-    // Still offer mute/block via small bar? Keep minimal: only when folded for v1 mute/block prominence
-    // Add tiny action buttons next to badge for borderline
-    const actions = document.createElement('div');
-    actions.className = 'anti-slop-bar';
-    actions.style.padding = '4px 8px';
-    actions.innerHTML = `
-      <button type="button" data-act="mute">${t('mute')}</button>
-      <button type="button" class="ss-danger" data-act="block">${t('block')}</button>
-    `;
-    actions.addEventListener('click', (ev) => {
-      const btn = (ev.target as HTMLElement).closest('button[data-act]') as HTMLButtonElement | null;
-      if (!btn) return;
-      const act = btn.getAttribute('data-act');
-      if (act === 'mute') handlers.onMute();
-      else if (act === 'block') handlers.onBlock();
-    });
-    article.appendChild(actions);
   }
 }
 
@@ -128,5 +152,6 @@ export function alreadyMounted(article: HTMLElement): boolean {
 export function clearMounted(article: HTMLElement): void {
   article.removeAttribute(ROOT_ATTR);
   article.classList.remove(FOLDED_CLASS);
+  restoreArticle(article);
   article.querySelectorAll('.anti-slop-bar, .anti-slop-badge').forEach((n) => n.remove());
 }
