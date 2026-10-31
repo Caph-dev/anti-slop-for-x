@@ -4,7 +4,7 @@ Scores replies on X (x.com) for AI and bot slop, then marks, folds, or blocks de
 
 [中文](README.md) · [CHANGELOG](CHANGELOG.md) · [Architecture](docs/architecture.md)
 
-Current version is v0.7.1. Verified on Chrome only. Not published to the Chrome Web Store.
+Current version is v0.8.0. Verified on Chrome only. Not published to the Chrome Web Store.
 
 ## Layout
 

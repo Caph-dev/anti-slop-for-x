@@ -1,6 +1,6 @@
 # Changelog
 
-## 未发布 / Unreleased
+## 0.8.0 — 2026-10-31
 
 新增调试模式：在 popup 里打开后，页面上每条已渲染且有正文的推文都显示自己的 AI 率，只读、不折叠、不屏蔽。
 Added a debug mode: turn it on in the popup and every rendered post with text on the page shows its own AI rate. Read-only — nothing is folded or blocked.
