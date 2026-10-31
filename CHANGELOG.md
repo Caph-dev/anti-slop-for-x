@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.0 — 2026-10-31
+
+- 调试徽标同时显示两个分数，用 `|` 分隔：`AI 56% | 47%`，前者是决策模型返回的分数，后者是与预筛混合后真正参与判定的分数。模型没跑（仅预筛、模型报错）时模型位显示 `–`，悬停提示 `模型分 | 最终分`。
+- Debug badges show both numbers separated by `|`: `AI 56% | 47%`, the decision-model score first and the final blended score the policy acts on second. When the model did not run (prefilter-only or model error) the first slot is `–`; hover says `model score | final score`.
+- `DecisionResult` 新增 `modelScore`（仅模型路径存在），与 `score`（最终分）分开记录，缓存命中时一并保留。
+- `DecisionResult` gained `modelScore` (model path only), recorded apart from `score` (the final number) and kept by cache hits.
+- 调试徽标只标注非默认的评分来源：模型评分不标 `模型`，`预筛` / `缓存` / `模型失败` 仍保留后缀。
+- Debug badges label only non-default score sources: a model score no longer says `model`, while `prefilter` / `cached` / `model failed` keep their suffix.
+
+判定轴改为「作者来源」：折叠的是机器写作，不是「有没有价值」。
+The axis became authorship: what gets folded is machine-written text, not low-value text.
+
+- 提示词主问句改为「这条回复是不是语言模型或回复农场写的」，并明确：内容准确、专业、有实质用处也可以是机器写的；内容空洞也可以是真人写的。上一版把「短、干、正式、非母语、中日韩、无 emoji」写成人类语域，实际把一批干净的中文 AI 评论压到了 16–19%。
+- The main question is now "was this reply written by a language model or a reply farm", and it says outright that an accurate, professional, genuinely useful reply can still be machine-written while a vacuous one can be typed by a person. The previous version declared short, dry, formal, non-native, CJK, emoji-free text a human register, which pushed a set of clean Chinese AI commentary down to 16–19%.
+- 证据要求改为对称：专业术语、干净文风不是人类证据；模板句式、复述、转折、排比也不是 AI 证据；指向 `@bot` 的指令既不证明也不豁免。判定靠两端残留——机器侧是 assistant 口吻、等长句读、「思路是对的，但关键要看…」这类承重骨架、装饰 emoji、孤立标点等生成痕迹；人侧是第一人称经历、粗糙或自我修正的措辞、玩笑或情绪、有理由的反驳、父帖没有的可核查事实。
+- Evidence is now symmetric: correct terminology and a clean register are not proof of a human, and template phrasing, restatement, pivots and parallelism are not proof of a model; an "@bot do X" directive neither proves nor exempts. Residue decides — on the machine side: assistant voice, near-equal clause lengths, a load-bearing hedge skeleton (思路是对的，但关键要看…), decorative emoji, lone punctuation; on the author side: first-person experience, rough or self-corrected phrasing, a joke or irritation, a reasoned disagreement, a checkable fact the parent lacks.
+- 新增父帖对照：要求指出复述了父帖哪项主张、增加了什么可核查内容、是否只是泛泛评价；父帖缺失时明确要求「无法比较」，不许在该轴上猜。
+- Added a parent comparison: name what the reply restates from the parent, what checkable content it adds, and whether it is only a generic evaluation; when the parent is missing the model must say it cannot compare instead of guessing on that axis.
+- 样本夹具按两类失败分开记：`reported_false_positive_2026_11_01`（真人短指令）与 `user_labelled_ai_2026_11_01`（用户标注为 AI 的四条中文技术评论，附父帖缺失与「按质量看并不空」的逐条说明），并留了真人对照组的空缺。没有写入任何分数。
+- The fixture now separates the two failure classes: `reported_false_positive_2026_11_01` (human short directives) and `user_labelled_ai_2026_11_01` (the four Chinese tech replies the user labelled AI, with notes that the parent is missing and that one of them is not low-value), plus an explicit list of human controls still to collect. No scores were written.
+- 仍未用真实 key 验证：这一版是朝「按作者来源判定」改的，实际百分比、误折叠与漏判都未测量；也没有改动阈值、预筛与加权公式。
+- Still unverified with a real key: this version targets authorship, and the actual percentages, false folds and misses are unmeasured; thresholds, prefilter and the weighting formula were not touched.
+
 ## 0.8.0 — 2026-10-31
 
 新增调试模式：在 popup 里打开后，页面上每条已渲染且有正文的推文都显示自己的 AI 率，只读、不折叠、不屏蔽。

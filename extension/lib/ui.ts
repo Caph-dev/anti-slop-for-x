@@ -1,7 +1,7 @@
 /** Fold / badge / Mute-Block UI injected into X tweets */
 
 import type { DecisionResult } from './types';
-import { debugScoreLabel } from './debug';
+import { debugBadgeText, debugScoreLabel } from './debug';
 
 const ROOT_ATTR = 'data-anti-slop';
 /** Post id the card was rendered for; X reuses article nodes across posts. */
@@ -264,8 +264,9 @@ export function mountDebugBadge(
   const label = debugScoreLabel(result, threshold);
   const badge = document.createElement('span');
   badge.className = `anti-slop-debug ss-${label.level}`;
-  badge.textContent = `AI ${label.pct}% · ${t(label.sourceKey)}`;
-  badge.title = label.detail;
+  badge.textContent = debugBadgeText(label, t);
+  // The two numbers are ordered model | final; say so on hover.
+  badge.title = label.detail ? `${t('debugOrderHint')}\n${label.detail}` : t('debugOrderHint');
   badge.dataset.source = label.sourceKey;
 
   const nameRow = article.querySelector('[data-testid="User-Name"]');

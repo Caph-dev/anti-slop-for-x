@@ -20,6 +20,7 @@ const EN: Record<string, string> = {
   srcCache: 'cached',
   srcSkipped: 'skipped',
   srcError: 'model failed',
+  debugOrderHint: 'model score | final score',
 };
 
 const ZH: Record<string, string> = {
@@ -42,6 +43,7 @@ const ZH: Record<string, string> = {
   srcCache: '缓存',
   srcSkipped: '跳过',
   srcError: '模型失败',
+  debugOrderHint: '模型分 | 最终分',
 };
 
 export function uiT(lang?: string): (key: string) => string {

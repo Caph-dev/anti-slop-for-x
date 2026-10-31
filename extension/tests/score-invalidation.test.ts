@@ -69,6 +69,10 @@ describe('scorePost invalidation', () => {
     expect(worker.calls).toHaveLength(1);
     expect(result.source).toBe('model');
     expect(getCached(key)).toBeUndefined();
+    // predicate 0.4 + bot_likelihood 1/4, choice human: 0.55*0.4 + 0.45*0.25.
+    expect(result.modelScore).toBeCloseTo(0.3325, 5);
+    // Nothing in the prefilter fired, so the final score is the model score.
+    expect(result.score).toBeCloseTo(0.3325, 5);
   });
 
   it('caches the same model score while the policy is still current', async () => {
@@ -81,5 +85,7 @@ describe('scorePost invalidation', () => {
 
     expect(result.source).toBe('model');
     expect(getCached(key)).toBeDefined();
+    expect(result.modelScore).toBeCloseTo(0.3325, 5);
+    expect(result.score).toBeCloseTo(0.3325, 5);
   });
 });

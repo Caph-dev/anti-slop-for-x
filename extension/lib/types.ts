@@ -99,7 +99,14 @@ export interface PrefilterResult {
 }
 
 export interface DecisionResult {
+  /** Final score after the prefilter blend; this is what the policy acts on. */
   score: number; // 0..1
+  /**
+   * Decision-model score before the prefilter blend (0..1). Only present when
+   * the model actually answered; prefilter-only and model-error results have
+   * no model number to show.
+   */
+  modelScore?: number;
   reason: string;
   source: 'prefilter' | 'model' | 'cache' | 'skipped';
   /**

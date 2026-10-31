@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  debugBadgeText,
   debugCacheKey,
   debugScoreLabel,
   debugScoringSettings,
@@ -18,9 +19,12 @@ function label(
   source: DecisionResult['source'],
   reason = '',
   prefilter?: DecisionResult['prefilter'],
+  modelScore?: number,
 ) {
-  return debugScoreLabel({ score, source, reason, prefilter }, 0.55);
+  return debugScoreLabel({ score, modelScore, source, reason, prefilter }, 0.55);
 }
+
+const t = (key: string) => key;
 
 describe('debug scoring settings', () => {
   it('bypasses every noise skip so each post gets a real score', () => {
@@ -61,6 +65,8 @@ describe('debug scoring settings', () => {
     });
     expect(debugged.source).toBe('prefilter');
     expect(debugged.score).toBeGreaterThan(0);
+    // No model ran, so there is no model score to display.
+    expect(debugged.modelScore).toBeUndefined();
   });
 
   it('keeps debug scores out of the normal cache', async () => {
@@ -123,6 +129,43 @@ describe('debug score labels', () => {
     expect(label(0.4, 'cache').sourceKey).toBe('srcCache');
     expect(label(0.4, 'skipped').sourceKey).toBe('srcSkipped');
     expect(label(0.4, 'prefilter', 'model-error→prefilter:none').sourceKey).toBe('srcError');
+  });
+
+  it('carries the model score separately from the final score', () => {
+    const withModel = label(0.47, 'model', 'model:predicate=0.56', undefined, 0.56);
+    expect(withModel.modelPct).toBe(56);
+    expect(withModel.pct).toBe(47);
+
+    // Prefilter-only and model-error results have no model number.
+    expect(label(0.42, 'prefilter').modelPct).toBeNull();
+    expect(label(0.42, 'prefilter', 'model-error→prefilter:none').modelPct).toBeNull();
+
+    // A cached model result keeps the number it was computed with.
+    const cached = debugScoreLabel(
+      { score: 0.47, modelScore: 0.56, source: 'cache', reason: 'model:x', prefilter: undefined },
+      0.55,
+    );
+    expect(cached.modelPct).toBe(56);
+    expect(cached.pct).toBe(47);
+  });
+
+  it('renders model | final, with a dash when no model ran', () => {
+    expect(debugBadgeText(label(0.47, 'model', 'model:x', undefined, 0.56), t)).toBe(
+      'AI 56% | 47%',
+    );
+    expect(debugBadgeText(label(0.42, 'prefilter'), t)).toBe('AI – | 42% · srcPrefilter');
+    expect(
+      debugBadgeText(label(0.42, 'cache', 'model:x', undefined, 0.56), t),
+    ).toBe('AI 56% | 42% · srcCache');
+  });
+
+  it('only annotates sources that are not a fresh model score', () => {
+    // `AI 42%` for the default path; the rest say why the number is not one.
+    expect(label(0.4, 'model').showSource).toBe(false);
+    expect(label(0.4, 'prefilter').showSource).toBe(true);
+    expect(label(0.4, 'cache').showSource).toBe(true);
+    expect(label(0.4, 'skipped').showSource).toBe(true);
+    expect(label(0.4, 'prefilter', 'model-error→prefilter:none').showSource).toBe(true);
   });
 
   it('exposes the reason and the prefilter hits in the hover text', () => {

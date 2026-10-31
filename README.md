@@ -4,7 +4,7 @@
 
 [English](README.en.md) · [CHANGELOG](CHANGELOG.md) · [架构说明](docs/architecture.md)
 
-当前版本 v0.8.0。只在 Chrome 上验证过，未上架 Chrome Web Store。
+当前版本 v0.9.0。只在 Chrome 上验证过，未上架 Chrome Web Store。
 
 ## 目录结构
 

@@ -22,11 +22,20 @@ export type DebugSourceKey =
   | 'srcError';
 
 export interface DebugLabel {
+  /** Final score, the one the normal policy acts on. */
   pct: number;
+  /** Decision-model score before the blend; null when the model did not run. */
+  modelPct: number | null;
   /** Mirrors the normal policy bands: high would fold, mid is borderline. */
   level: DebugLevel;
-  /** uiT key for the score source, shown next to the percentage. */
+  /** Where the number came from; kept for the tooltip and the dataset. */
   sourceKey: DebugSourceKey;
+  /**
+   * The model is the default producer, so naming it adds nothing to the common
+   * case. Prefilter, cache and failure are worth showing: they say the number
+   * is not a fresh model judgement.
+   */
+  showSource: boolean;
   /** Hover text: the decision reason plus the prefilter hits that fired. */
   detail: string;
 }
@@ -56,10 +65,10 @@ export function debugSourceKey(
 }
 
 export function debugScoreLabel(
-  result: Pick<DecisionResult, 'score' | 'source' | 'reason' | 'prefilter'>,
+  result: Pick<DecisionResult, 'score' | 'modelScore' | 'source' | 'reason' | 'prefilter'>,
   threshold: number,
 ): DebugLabel {
-  const score = Math.max(0, Math.min(1, result.score));
+  const score = clamp01(result.score);
   const level: DebugLevel =
     score >= threshold ? 'high' : score >= threshold * 0.7 ? 'mid' : 'low';
 
@@ -75,10 +84,31 @@ export function debugScoreLabel(
     .filter(Boolean)
     .join('\n');
 
+  const sourceKey = debugSourceKey(result);
   return {
     pct: Math.round(score * 100),
+    modelPct: typeof result.modelScore === 'number' ? Math.round(clamp01(result.modelScore) * 100) : null,
     level,
-    sourceKey: debugSourceKey(result),
+    sourceKey,
+    showSource: sourceKey !== 'srcModel',
     detail,
   };
+}
+
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
+/**
+ * `AI 56% | 47%`: the decision-model score first, then the final blended score
+ * the policy acts on. A prefilter-only result has no model number, shown as
+ * `–` rather than pretending the prefilter score came from the model.
+ */
+export function debugBadgeText(
+  label: Pick<DebugLabel, 'pct' | 'modelPct' | 'showSource' | 'sourceKey'>,
+  t: (key: string) => string,
+): string {
+  const model = label.modelPct == null ? '–' : `${label.modelPct}%`;
+  const source = label.showSource ? ` · ${t(label.sourceKey)}` : '';
+  return `AI ${model} | ${label.pct}%${source}`;
 }

@@ -91,6 +91,7 @@ export async function scorePost(
     const blended = Math.max(score, pre.score * 0.85);
     const r: DecisionResult = {
       score: blended,
+      modelScore: score,
       reason: `model:${reason}; pre=${pre.score.toFixed(2)}`,
       source: 'model',
       evidence: 'model',
