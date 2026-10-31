@@ -4,14 +4,14 @@
 
 [English](README.en.md) · [CHANGELOG](CHANGELOG.md) · [架构说明](docs/architecture.md)
 
-当前版本 v0.6.0。只在 Chrome 上验证过，未上架 Chrome Web Store。
+当前版本 v0.7.1。只在 Chrome 上验证过，未上架 Chrome Web Store。
 
 ## 目录结构
 
 ```
 extension/  Chrome MV3 扩展，WXT + TypeScript
 worker/     0.1.0 时代的本机代理，扩展已不再调用
-docs/       架构、Strict 模式设计、旧版代理、隐私政策
+docs/       架构、旧版代理、隐私政策
 ROADMAP.md  计划中与暂时关闭的功能
 ```
 
@@ -20,25 +20,22 @@ ROADMAP.md  计划中与暂时关闭的功能
 1. content script 读取时间线上已经渲染出来的回复。
 2. 本地关键词预筛给出 0..1 的初分。命中强特征就直接判定，不打模型。
 3. 边缘样本发给你配置的决策模型，模型分与预筛分混合。
-4. 结果按当前模式处理：只标记、折叠，或进入自动屏蔽队列。
+4. 结果按当前模式处理：只标记，或者折叠。
 
 扩展不含密钥，也不中转流量。你填自己的 endpoint 和 key，请求由 background service worker 直接发往该地址。评分只在本机和你选定的上游之间流转。
 
 ## 安装
 
-需要 Node.js 20.12 或更高版本，这是 `wxt` 的 `engines` 要求。
+1. 打开 [Releases](https://github.com/Caph-dev/anti-slop-for-x/releases)，下载最新的 `anti-slop-for-x-extension-<版本>-chrome.zip`。
+2. 解压到一个固定的目录，比如 `~/Extensions/anti-slop-for-x`。
+3. 打开 `chrome://extensions`，启用开发者模式。
+4. 点「加载已解压的扩展程序」，选择解压后的目录。
+5. 在扩展选项页填入 endpoint 和 key。
+6. 打开任意 x.com 页面，点工具栏图标，确认面板能打开。
 
-```bash
-npm install
-npm run unpacked
-```
+升级时下载新 zip，解压覆盖同一个目录，再到扩展页点一次刷新按钮。目录换了位置，Chrome 会把它当成另一个扩展，所以保持路径不变。
 
-1. 打开 `chrome://extensions`，启用开发者模式。
-2. 点「加载已解压的扩展程序」，选择 `unpacked/chrome-mv3`。
-3. 在扩展选项页填入 endpoint 和 key。
-4. 打开任意 x.com 页面，点工具栏图标，确认面板能打开。
-
-`npm run unpacked` 先构建，再把产物镜像到 `unpacked/chrome-mv3`。改完代码重跑这条命令，然后到扩展页点一次刷新按钮。
+从源码构建的步骤见[开发](#开发)。
 
 ## 配置
 
@@ -67,17 +64,9 @@ OpenAI 预设用真实 key 验证过：`gpt-6-luna` 出现在 `/v1/models`，`PO
 
 两个模式都不写你的 X 账号。静音和屏蔽只在你自己点的时候执行。
 
-### Strict 模式已关闭
-
-曾有一档「严厉」模式：模型分数达到 `max(0.9, 阈值)` 时自动屏蔽作者。它在 v0.7.0 时关闭，代码保留，开关是 `extension/lib/mode.ts` 里的 `STRICT_ENABLED`。
-
-原因是自动屏蔽会写入你的 X 账号，对方也能感知，而这条路径从未在真实浏览器会话中验证过。现在即使 `chrome.storage.local` 里还留着 `strict`，加载时也会降级成自动折叠；原值不删除，重新开启时会恢复。
-
-设计与闸门写在 [docs/strict-mode.md](docs/strict-mode.md)，重新开启的条件在 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。
-
 ## 界面
 
-工具栏图标打开 popup，面板显示当前 endpoint、模型、模式、扫描范围和状态，并提供「扫描当前页」和「选项」两个按钮。扫描结束会报告处理了多少条，扫不到内容时说明原因。面板底部的自动动作日志在 Strict 关闭期间始终为空。
+工具栏图标打开 popup，面板显示当前 endpoint、模型、模式、扫描范围和状态，并提供「扫描当前页」和「选项」两个按钮。扫描结束会报告处理了多少条，扫不到内容时说明原因。
 
 超过阈值的回复折叠成一条整行宽的卡片。
 
@@ -103,12 +92,20 @@ OpenAI 预设用真实 key 验证过：`gpt-6-luna` 出现在 `/v1/models`，`PO
 ## 已知限制
 
 - 只保证 Chrome MV3。WXT 结构便于以后加 Firefox，但尚未适配。
-- 未上架 Chrome Web Store，当前只能从源码加载，或解压 release 里的 zip。
-- Strict 模式关闭。自动屏蔽的限速、熔断、撤销链路未经真机验证，因此不提供入口，见 [ROADMAP](ROADMAP.md)。
+- 未上架 Chrome Web Store，安装靠 release 里的 zip。
 - 去重按 handle 记账，`userId` 尚未从 DOM 解析。
 - `worker/` 是 0.1.0 时代的代理，扩展已不再调用，说明见 [docs/legacy-proxy.md](docs/legacy-proxy.md)。
 
 ## 开发
+
+从源码构建需要 Node.js 20.12 或更高版本，这是 `wxt` 的 `engines` 要求。
+
+```bash
+npm install
+npm run unpacked
+```
+
+`npm run unpacked` 先构建，再把产物镜像到 `unpacked/chrome-mv3`，Chrome 加载这个目录。改完代码重跑这条命令，再到扩展页点刷新。
 
 | 命令 | 作用 |
 |---|---|
@@ -117,14 +114,13 @@ OpenAI 预设用真实 key 验证过：`gpt-6-luna` 出现在 `/v1/models`，`PO
 | `npm run unpacked` | 构建并镜像到 `unpacked/chrome-mv3` |
 | `npm test` | 运行单元测试 |
 | `npm run typecheck` | TypeScript 类型检查 |
-| `npm run zip` | 产出可上传商店的 zip |
-| `npm run release:build` | 类型检查、测试、zip、镜像未打包目录 |
+| `npm run zip` | 产出扩展 zip，WXT 原生命名 |
+| `npm run release:build` | 类型检查、测试、zip、镜像未打包目录、把 zip 命名为 `v<版本>.zip` |
 
 ## 文档
 
 - [架构说明](docs/architecture.md)：请求链路、端点预设、BYOK 边界
-- [Strict 模式设计](docs/strict-mode.md)：闸门、TLA+ 模型、重新开启的条件
-- [路线图](ROADMAP.md)：暂时关闭的功能与已知缺口
+- [路线图](ROADMAP.md)：计划中的功能与已知缺口
 - [旧版代理](docs/legacy-proxy.md)：`worker/` 的用途与 curl 示例
 - [隐私政策草稿](docs/privacy-policy.md)
 - [变更记录](CHANGELOG.md)

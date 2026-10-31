@@ -19,7 +19,8 @@
    npm run release:build
    ```
 
-   它依次执行 `typecheck` → `test` → `zip`（产物 `extension/.output/anti-slop-for-x-extension-X.Y.Z-chrome.zip`）→ 镜像到 `unpacked/chrome-mv3`。
+   它依次执行 `typecheck` → `test` → `zip` → 镜像到 `unpacked/chrome-mv3` → 把 zip 重命名为 `extension/.output/vX.Y.Z.zip`。
+   **release 资产名一律是 `vX.Y.Z.zip`**，不带产品名。`scripts/name-release-asset.mjs` 负责改名，并保证 `extension/.output` 里只留一个 zip。
    **zip 与 unpacked 必须出自同一次构建**，所以不要用「先 `npm run unpacked` 再单独 zip」的顺序手动拼，直接跑这一条。
 
 4. **提交 → 打 tag → push → 建 release**：
@@ -28,7 +29,7 @@
    git add -A && git commit -m "..."
    git tag -a vX.Y.Z -m "Anti Slop for X vX.Y.Z"
    git push origin main && git push origin vX.Y.Z
-   gh release create vX.Y.Z extension/.output/anti-slop-for-x-extension-X.Y.Z-chrome.zip \
+   gh release create vX.Y.Z extension/.output/vX.Y.Z.zip \
      --title "..." --notes-file <notes> --verify-tag
    ```
 

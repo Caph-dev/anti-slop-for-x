@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1 — 2026-10-31
+
+- 安装说明改为下载 release 产物，不再要求 `npm install` 和 `npm run unpacked`；构建步骤移到「开发」节。
+- Install now means downloading a release asset. `npm install` and `npm run unpacked` moved to the Development section.
+- README 不再提到 Strict 模式。选项页只剩两档，文档不必解释一个不存在的选项。相关设计与 issue 仍保留在 `ROADMAP.md` 和 `docs/strict-mode.md`。
+- The README no longer mentions strict mode. The options page offers two modes, so the docs do not explain an option that is not there. The design and the issue stay in `ROADMAP.md` and `docs/strict-mode.md`.
+- release 资产改名为 `vX.Y.Z.zip`，不再带产品名。`npm run release:build` 末尾由 `scripts/name-release-asset.mjs` 重命名，并保证 `extension/.output` 里只有一个 zip。
+- Release assets are named `vX.Y.Z.zip` with no product name. `npm run release:build` renames through `scripts/name-release-asset.mjs` and leaves a single zip in `extension/.output`.
+- 两份 README 的版本号同步到 0.7.1。
+- Both READMEs now report 0.7.1.
+
 ## 0.7.0 — 2026-10-31
 
 Strict 模式（自动屏蔽）暂时关闭，代码保留；README 重写为中英两份。

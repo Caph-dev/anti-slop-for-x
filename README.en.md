@@ -4,14 +4,14 @@ Scores replies on X (x.com) for AI and bot slop, then marks, folds, or blocks de
 
 [中文](README.md) · [CHANGELOG](CHANGELOG.md) · [Architecture](docs/architecture.md)
 
-Current version is v0.6.0. Verified on Chrome only. Not published to the Chrome Web Store.
+Current version is v0.7.1. Verified on Chrome only. Not published to the Chrome Web Store.
 
 ## Layout
 
 ```
 extension/  Chrome MV3 extension, WXT and TypeScript
 worker/     The 0.1.0-era local proxy; the extension no longer calls it
-docs/       Architecture, strict mode design, legacy proxy, privacy policy
+docs/       Architecture, legacy proxy, privacy policy
 ROADMAP.md  Planned work and shelved features
 ```
 
@@ -20,25 +20,22 @@ ROADMAP.md  Planned work and shelved features
 1. A content script reads the replies already rendered in the timeline.
 2. A local keyword prefilter produces a 0..1 score. Strong matches are decided without calling a model.
 3. Borderline replies go to the decision model you configure, and the model score is blended with the prefilter score.
-4. The result is handled by the current mode: mark it, fold it, or queue an automatic block.
+4. The current mode decides what happens: mark the reply, or fold it.
 
 The extension holds no key and relays no traffic. You supply your own endpoint and key, and the background service worker sends the request straight to that address. Scoring stays between your machine and the upstream you chose.
 
 ## Install
 
-Requires Node.js 20.12 or later, which is what `wxt` declares in `engines`.
+1. Open [Releases](https://github.com/Caph-dev/anti-slop-for-x/releases) and download the latest `anti-slop-for-x-extension-<version>-chrome.zip`.
+2. Unzip it into a fixed directory, for example `~/Extensions/anti-slop-for-x`.
+3. Open `chrome://extensions` and turn on Developer mode.
+4. Click "Load unpacked" and select the unzipped directory.
+5. Fill in the endpoint and key on the extension options page.
+6. Open any x.com page, click the toolbar icon, and confirm the panel opens.
 
-```bash
-npm install
-npm run unpacked
-```
+To upgrade, download the new zip, unzip it over the same directory, and click the reload button on the extension card. Chrome treats a different path as a different extension, so keep the directory where it is.
 
-1. Open `chrome://extensions` and turn on Developer mode.
-2. Click "Load unpacked" and select `unpacked/chrome-mv3`.
-3. Fill in the endpoint and key on the extension options page.
-4. Open any x.com page, click the toolbar icon, and confirm the panel opens.
-
-`npm run unpacked` builds first, then mirrors the build into `unpacked/chrome-mv3`. After a code change, run it again and click the reload button on the extension card.
+Building from source is covered under [Development](#development).
 
 ## Configure
 
@@ -67,17 +64,9 @@ The Mode setting decides what happens after scoring.
 
 Neither mode writes to your X account. Mute and block run only when you click them.
 
-### Strict mode is off
-
-There used to be a Strict mode that blocked the author automatically once the model score reached `max(0.9, threshold)`. It is switched off as of v0.7.0. The code stays, behind `STRICT_ENABLED` in `extension/lib/mode.ts`.
-
-Automatic blocking writes to your X account and the other person can see it, and this path has never run in a real browser session. A `strict` value left in `chrome.storage.local` is downgraded to auto fold when settings load. The stored value is kept, so re-enabling restores it.
-
-The design and its guards are in [docs/strict-mode.md](docs/strict-mode.md). What has to be true before it returns is in [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2).
-
 ## What you see
 
-The toolbar icon opens a popup. It shows the current endpoint, model, mode, scan scope, and status, plus a "Scan current page" button and an "Options" button. A scan reports how many replies it handled and explains when there was nothing to scan. The automatic action log at the bottom stays empty while strict mode is off.
+The toolbar icon opens a popup. It shows the current endpoint, model, mode, scan scope, and status, plus a "Scan current page" button and an "Options" button. A scan reports how many replies it handled and explains when there was nothing to scan.
 
 A reply above the threshold folds into one full-width card.
 
@@ -103,12 +92,20 @@ Manual mute and block try X's native "···" menu first, then fall back to the 
 ## Known limits
 
 - Chrome MV3 only. The WXT layout leaves room for Firefox, but nothing is adapted or verified there.
-- Not on the Chrome Web Store. You load it from source or unzip the release asset.
-- Strict mode is off. Its rate limiting, meltdown, and undo path have never run in a real browser, so the feature ships without an entry point. See [ROADMAP](ROADMAP.md).
+- Not on the Chrome Web Store. Install from a release zip.
 - Deduplication uses the handle, because `userId` is not parsed from the DOM yet.
 - `worker/` is the 0.1.0-era proxy. The extension no longer calls it. See [docs/legacy-proxy.md](docs/legacy-proxy.md).
 
 ## Development
+
+Building from source needs Node.js 20.12 or later, which is what `wxt` declares in `engines`.
+
+```bash
+npm install
+npm run unpacked
+```
+
+`npm run unpacked` builds first, then mirrors the build into `unpacked/chrome-mv3`, which is the directory Chrome loads. After a code change, run it again and click the reload button on the extension card.
 
 | Command | Effect |
 |---|---|
@@ -117,14 +114,13 @@ Manual mute and block try X's native "···" menu first, then fall back to the 
 | `npm run unpacked` | Build and mirror into `unpacked/chrome-mv3` |
 | `npm test` | Run unit tests |
 | `npm run typecheck` | TypeScript type check |
-| `npm run zip` | Produce the store zip |
-| `npm run release:build` | Type check, test, zip, and mirror the unpacked folder |
+| `npm run zip` | Produce the extension zip with WXT's own name |
+| `npm run release:build` | Type check, test, zip, mirror the unpacked folder, and name the zip `v<version>.zip` |
 
 ## Docs
 
 - [Architecture](docs/architecture.md): request path, endpoint presets, what BYOK does and does not protect
-- [Strict mode design](docs/strict-mode.md): the guards, the TLA+ model, and what re-enabling requires
-- [Roadmap](ROADMAP.md): shelved features and known gaps
+- [Roadmap](ROADMAP.md): planned work and known gaps
 - [Legacy proxy](docs/legacy-proxy.md): what `worker/` was for, with a curl example
 - [Privacy policy draft](docs/privacy-policy.md)
 - [Changelog](CHANGELOG.md)
