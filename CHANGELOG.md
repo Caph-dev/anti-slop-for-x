@@ -1,5 +1,12 @@
 # Changelog
 
+## 未发布 / Unreleased
+
+- 自动屏蔽在调用前重新读取模式与启用状态。TLA+ 模型（`AutoBlock.tla`，TLC）发现一个窗口：出队检查通过后还有两次存储往返（`isHandled`、`reserveAutoAction`），期间关掉 Strict 仍会发出屏蔽请求。
+- The automatic block path re-reads the mode and enabled flag right before the call. A TLA+ model (`AutoBlock.tla`, checked with TLC) found a window: after the dequeue check, two storage round trips ran before the call, so turning strict mode off in between still blocked the author.
+- README 重写为中英两份（`README.md` 中文，`README.en.md` 英文，互相链接）。修正两处与代码矛盾的描述：旧开头称「Mute / Block 仅在你点击时触发」，Strict 模式会自动屏蔽；旧安全边界段称自动屏蔽「无法在扩展内撤销」，popup 已支持撤销。旧的 `worker/` 使用说明移到 `docs/legacy-proxy.md`。
+- README rewritten as a Chinese and an English pair (`README.md` and `README.en.md`, cross-linked). Fixed two claims that contradicted the code: the old intro said mute/block only fire on click, which strict mode breaks, and the safety section said auto-blocks could not be undone, which the popup now does. The `worker/` instructions moved to `docs/legacy-proxy.md`.
+
 ## 0.6.0 — 2026-10-31
 
 三档运行模式（手动 / 自动折叠 / 严厉）+ 自动动作的安全加固与一键撤销。

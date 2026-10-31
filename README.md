@@ -1,125 +1,47 @@
 # Anti Slop for X
 
-在 X（x.com）上检测 AI 注水 / 机器人回复：本地关键词预筛 +（可选）决策模型；超过阈值则折叠并显示分数/原因；**Mute / Block 仅在你点击时触发**。扩展不含任何 key、也不含服务器：你填自己的上游 endpoint 与 key（BYOK），请求直接从扩展发往你配置的地址。
+在 X（x.com）上给回复打「疑似 AI 或机器人」分数，再按分数标记、折叠或自动屏蔽。
 
-> 参考了 [slop-filter](https://github.com/adamnroman/slop-filter)（MIT）与 [BotBlind 指南](https://botblind.app/how-to-hide-ai-replies-on-x)；**未 fork**，独立实现。
+[English](README.en.md) · [CHANGELOG](CHANGELOG.md) · [架构说明](docs/architecture.md)
+
+当前版本 v0.6.0。只在 Chrome 上验证过，未上架 Chrome Web Store。
 
 ## 目录结构
 
 ```
-anti-slop-for-x/
-  extension/   # WXT + TypeScript，Chrome MV3
-  worker/      # 本地 Node mock 代理（CF Worker 脚手架稍后部署）
-  docs/        # 隐私政策草稿、架构说明
+extension/  Chrome MV3 扩展，WXT + TypeScript
+worker/     0.1.0 时代的本机代理，扩展已不再调用
+docs/       架构、旧版代理、隐私政策
 ```
 
-## 怎么装（Chrome 加载未打包扩展）
+## 它怎么工作
 
-1. 安装依赖：
+1. content script 读取时间线上已经渲染出来的回复。
+2. 本地关键词预筛给出 0..1 的初分。命中强特征就直接判定，不打模型。
+3. 边缘样本发给你配置的决策模型，模型分与预筛分混合。
+4. 结果按当前模式处理：只标记、折叠，或进入自动屏蔽队列。
+
+扩展不含密钥，也不中转流量。你填自己的 endpoint 和 key，请求由 background service worker 直接发往该地址。评分只在本机和你选定的上游之间流转。
+
+## 安装
+
+需要 Node.js 20.12 或更高版本，这是 `wxt` 的 `engines` 要求。
 
 ```bash
-cd anti-slop-for-x
 npm install
+npm run unpacked
 ```
 
-2. 生成一份稳定的未打包目录（Chrome 长期加载就用它，会自动先构建）：
+1. 打开 `chrome://extensions`，启用开发者模式。
+2. 点「加载已解压的扩展程序」，选择 `unpacked/chrome-mv3`。
+3. 在扩展选项页填入 endpoint 和 key。
+4. 打开任意 x.com 页面，点工具栏图标，确认面板能打开。
 
-```bash
-npm run unpacked        # = npm run build + 镜像到 unpacked/chrome-mv3
-```
+`npm run unpacked` 先构建，再把产物镜像到 `unpacked/chrome-mv3`。改完代码重跑这条命令，然后到扩展页点一次刷新按钮。
 
-3. 打开 Chrome → `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选择：
+## 配置
 
-```text
-unpacked/chrome-mv3
-```
-
-4. 打开扩展「选项」页配置（见下）。
-
-### 为什么单独放 `unpacked/`
-
-`extension/.output/chrome-mv3` 每次构建都会被重写、旧 hash 文件名会消失，Chrome 加载着它会报 manifest 读不到、必须重新加载。`npm run unpacked` 会整体替换 `unpacked/chrome-mv3`（先写临时目录再改名，不会出现半成品，也不会残留旧 chunk）。
-
-- 改代码后重新跑 `npm run unpacked`，再到 `chrome://extensions` 点一次刷新按钮即可。
-- `unpacked/` 在 `.gitignore` 里，不会进仓库，也不会进 release 资产；要发给别人用请用 `npm run zip` 的产物或 release 里的 zip。
-
-需要一次拿到「商店 zip」和「未打包目录」时：
-
-```bash
-npm run release:build   # typecheck + test + zip + 镜像到 unpacked/chrome-mv3
-```
-
-两者出自同一次构建，所以 zip 里的代码和你本地加载的完全一致。
-
-开发模式可用：
-
-```bash
-npm run dev -w extension
-```
-
-## 点扩展图标会看到什么
-
-工具栏图标是一个小面板（`entrypoints/popup`），不是设置页：
-
-- **端点 / 模型 / 范围 / 状态** 四项当前配置摘要（悬停端点可看完整 URL）
-- **扫描当前页** — 强制重扫当前标签，结束后报告「已扫描 N 条」；扫不到东西时会说明原因（例如首页时间线在「仅回复」模式下只处理回复）
-- **选项** — 打开完整设置页
-
-> 旧版（≤ v0.3.1）点击图标是「直接扫描、无任何反馈」，且只有页面里没有 content script 时才回退打开设置页，因此在 `/home` 这类没有可扫内容的页面上表现为完全没有反应。现在改为显式面板。
-
-## 本地 Worker（旧版代理，扩展已不再使用）
-
-`v0.1.0` 之前扩展经由本机代理转发；现在走 BYOK 直连，这一节仅在你想自己搭服务端代理时参考。
-
-```bash
-npm run worker:start
-# 默认 http://127.0.0.1:8787
-```
-
-- `GET /health` — 探活  
-- `POST /v1/decide` — 接收 `upstreamBaseUrl` / `payload` 并转发，`Authorization` 来自请求本身
-
-环境变量：`PORT`（默认 8787）、`HOST`（默认 127.0.0.1）。
-
-> 注意：该代理当前的 body 契约与扩展的直连请求不同，不能直接把 `upstreamBaseUrl` 指向它。
-
-CF 部署见 `worker/wrangler.toml` 与 `worker/src/cf-worker.ts`。
-
-### 用 curl 打通 Worker → Jev
-
-先启动 Worker，再（**不要把 key 写进仓库**）：
-
-密钥文件不在仓库里。若你还留着临时名时期的 `~/.config/slop-shield-jev.env`，改名为下面这个路径，或继续 source 旧文件即可（见 [CHANGELOG](CHANGELOG.md)）。
-
-```bash
-set -a; source ~/.config/anti-slop-for-x-jev.env; set +a
-
-curl -sS http://127.0.0.1:8787/health
-
-curl -sS -X POST http://127.0.0.1:8787/v1/decide \
-  -H "Authorization: Bearer $JEV_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "protocol": "jev",
-    "upstreamBaseUrl": "https://api.typesafe.ai/v1",
-    "upstreamPath": "/systemone",
-    "model": "jev-latest",
-    "payload": {
-      "model": "jev-latest",
-      "state": { "post": { "text": "Great point! This is a game-changer" } },
-      "questions": {
-        "is_slop": {
-          "type": "noul",
-          "instructions": "does this look like AI engagement bait / bot reply on X"
-        }
-      }
-    }
-  }'
-```
-
-## 端点选择（3 档）
-
-选项页的 **Endpoint** 决定 Base URL、决策路径与协议；选中官方预设时这三个字段自动填好并锁定，选 `Custom` 才能编辑。**Model 始终可改**，预设只提供默认值。
+选项页的 Endpoint 决定 Base URL、决策路径和协议。选中官方预设时这三项自动填好并锁定，选 Custom 才能编辑。Model 始终可改，预设只提供默认值。
 
 | Endpoint | Base URL | Path | Protocol | 默认 Model |
 |---|---|---|---|---|
@@ -127,95 +49,94 @@ curl -sS -X POST http://127.0.0.1:8787/v1/decide \
 | OpenAI Decisions（官方） | `https://api.openai.com/v1` | `/decisions` | `openai-decisions` | `gpt-6-luna` |
 | Custom endpoint | 你填 | 你填 | 你选 | 你填 |
 
-- 两个官方预设的 origin 已在 `host_permissions` 里，保存不会弹权限窗。
-- 选 `Custom` 且换到别的 origin 时，点「保存」会让 Chrome 弹出该 origin 的访问授权（`optional_host_permissions`）；拒绝授权后请求会失败并提示重新保存。
-- 旧版设置（没有 `endpointPreset` 字段）会按 Base URL + 协议 + 有效 path 自动归位；凡是和官方预设不完全一致的，一律归为 `Custom`，不会被静默改指。
-- OpenAI 预设已用真实 key 验证（2026-10-31）：`gpt-6-luna` 在 `/v1/models` 中可见，`POST https://api.openai.com/v1/decisions` 返回 HTTP 200，`answers[]` 的 `probability` / `choice` / `score` 与解析器一致；该真实响应已固化为测试夹具 `extension/tests/fixtures/openai-decisions-real.json`。
+两个官方预设的 origin 已在 `host_permissions` 中，保存不会弹权限窗。选 Custom 并换到其他域名时，保存会触发 Chrome 对该 origin 的授权请求；拒绝授权后请求会失败，重新保存可以再申请。
 
-### Key 放哪？
+key 只存在 `chrome.storage.local`，只发往你选的 Base URL。能读你 Chrome profile 目录的本机进程仍能取到明文 key，任何把密钥存在浏览器里的方案都有这个限制。
 
-- key 只存在 `chrome.storage.local`，只发往你填的 Base URL；扩展包、仓库、release 产物里都没有 key。
-- 请求在 background service worker 里发出（content script 受页面 CORS 限制，service worker 有 host permission 不受限）。
-- 局限：能读你 Chrome profile 目录的本机进程仍能拿到明文 key，这是任何「把 key 存在浏览器里」的方案都躲不掉的。
-- **不要**把真实 Jev key 提交进本仓库，也不要把选项页截图连 key 一起发出去。
-
-## 预筛与模型如何配合
-
-1. **本地预筛**（BotBlind 风格）：套话、"It's not X, it's Y"、空洞夸赞、模板 emoji、用户名尾随数字、超快长回复、DM/空投诱饵等 → 得到 0..1 分数。  
-2. 分数已很高或命中硬规则 → **可直接折叠**，不必打模型。  
-3. 勾选「仅预筛」→ 永不调用模型。  
-4. 否则边缘样本经 background service worker 打决策模型，与预筛分混合后与阈值比较。  
-5. 按帖子 id 缓存；并发限制 + 视口触发；可白名单账号。
+OpenAI 预设用真实 key 验证过：`gpt-6-luna` 出现在 `/v1/models`，`POST https://api.openai.com/v1/decisions` 返回 HTTP 200，`answers[]` 与解析器一致。该响应已固化为测试夹具 `extension/tests/fixtures/openai-decisions-real.json`。
 
 ## 三个模式
 
-选项页的 **Mode** 决定评分之后发生什么：
+选项页的 Mode 决定评分之后发生什么。
 
-| 模式 | 超阈值的行为 | 会改你的 X 账号吗 |
+| 模式 | 超过阈值时 | 会改你的 X 账号 |
 |---|---|---|
-| **手动 / Manual** | 只显示疑似 AI 率，内容不隐藏，由你决定 | 否 |
-| **自动折叠 / Auto Fold**（默认） | 折叠回复 | 否 |
-| **严厉 / Strict** | 折叠；若模型给出 ≥ `max(0.9, 阈值)` 的分数，自动屏蔽作者 | 是 |
+| 手动 Manual | 只显示疑似 AI 率，内容不隐藏 | 否 |
+| 自动折叠 Auto Fold（默认） | 折叠回复 | 否 |
+| 严厉 Strict | 折叠；模型分数达到 `max(0.9, 阈值)` 时自动屏蔽作者 | 是 |
 
-### 自动动作的安全边界
+自动屏蔽是破坏性动作，所以加了几道闸。
 
-Strict 的自动屏蔽是破坏性且目前无法在扩展内撤销，所以加了几道闸：
+- **证据门槛**：只有决策模型给出的分数能触发自动屏蔽。仅预筛、勾选「仅预筛」、以及模型报错回退到预筛的分数，再高也只折叠。
+- **限速**：两次自动动作至少间隔 20 秒，每天最多 30 次。计数存在 `chrome.storage.local`，刷新和多标签共享。
+- **熔断**：X 返回 403 或 429 时暂停自动动作 1 小时并提示。
+- **去重**：按 `userId`（未知时用 handle）记账 7 天，跨标签页和刷新都生效。
+- **出队复查**：队列任务执行前重新检查扩展是否启用、是否仍在 Strict、是否命中白名单或自己的帖子。
+- **留痕与撤销**：每次自动动作写入日志，保留最近 50 条，在 popup 里查看。被自动屏蔽的账号可以撤销。
 
-- **证据门槛**：只有决策模型给出的分数能触发自动屏蔽。仅预筛、`prefilterOnly`、以及模型报错回退到预筛的分数，再高也只折叠不屏蔽。
-- **限速**：两次自动动作至少间隔 20 秒，每天上限 30 次，状态存 `chrome.storage.local`，刷新和多标签共享。
-- **熔断**：X 返回 403/429 时暂停自动动作 1 小时并提示，而不是继续重试。
-- **持久去重**：按 `userId`（无则 handle）记账 7 天，跨标签页和刷新都生效。
-- **出队复查**：队列里的任务执行前会重新检查扩展是否启用、是否还在 Strict、是否命中白名单/自己的帖子。
-- **留痕与撤销**：每次自动动作写入日志（最近 50 条），popup 里可见；被自动屏蔽的账号带**撤销**按钮。
+### 撤销一次自动屏蔽
 
-### 撤销一条自动屏蔽
+在 popup 的自动动作日志里点该条右侧的「撤销」。
 
-点 popup 里该条记录右侧的「撤销」：
+1. 扩展通过任意一个已打开的 x.com 标签页调用 `blocks/destroy.json` 解除屏蔽。
+2. 该账号加入账号白名单，避免 Strict 在下一条帖子上再屏蔽回去。
+3. 日志条目标记为已撤销。
 
-1. 通过任意一个已打开的 x.com 标签页调用 `blocks/destroy.json` 解除屏蔽（顺带把对方从你的屏蔽列表移除）。
-2. 该账号自动加入**账号白名单**（选项页可见、可移除），这样 Strict 模式不会在下一条帖子上再把它屏蔽回去。
-3. 日志条目标记为「已撤销」。
+解除屏蔽需要 x.com 的页面上下文，才能带上登录 cookie 和 csrf token。没有打开的 x.com 标签页时 popup 会提示。
 
-需要至少一个 x.com 标签页处于打开状态：解除屏蔽必须在该页面上下文里执行，才能带上登录 cookie 和 csrf token。没有 x.com 标签页时 popup 会提示。
+## 界面
 
-已知缺口：**没有「同一作者多条高分才封禁」的作者级证据累积**（按你的决定不做），去重仍以 handle 为键（`userId` 尚未从 DOM 解析）。
+工具栏图标打开 popup，面板显示当前 endpoint、模型、模式、扫描范围和状态，并提供「扫描当前页」和「选项」两个按钮。扫描结束会报告处理了多少条，扫不到内容时说明原因。
 
-## 折叠卡片上的操作
-
-疑似 AI 率超过阈值的回复会被折叠成一条整行宽的卡片：
+超过阈值的回复折叠成一条整行宽的卡片。
 
 ```text
 疑似 AI/机器人 55%   [展开] [静音] [屏蔽]
 ```
 
-- **展开** — 还原这条回复的完整内容；展开后卡片收起，时间戳后面会出现一个可点击的 `AI? 55%` 药丸，**点它可重新折叠**。
-- 卡片的悬停提示里保留原始打分细节（`predicate` / `score` / `kind` / 预筛分），界面上只显示疑似 AI 率。
-- 分数没到阈值但也没明显像人（≥ 阈值 70%）的回复不折叠，只在时间戳后加 `AI? nn%` 被动标记。
+- 点**展开**还原回复内容。卡片收起后时间戳后面出现一个可点击的 `AI? 55%` 药丸，点它可以重新折叠。
+- 卡片悬停提示里保留原始打分细节，界面上只显示疑似 AI 率。
+- 分数没到阈值但达到阈值的 70% 时不折叠，只在时间戳后加一个 `AI? nn%` 标记。
 
-### 静音 vs 屏蔽
+### 静音与屏蔽
 
-沿用 X 自己的术语，两个动作的差别是：
+沿用 X 自己的术语。
 
 | 操作 | 效果 |
 |---|---|
-| **静音（Mute）** | 你不再看到这个账号的推文；对方不会收到任何通知，也能继续关注你。 |
-| **屏蔽（Block）** | 对方无法关注你、无法与你互动；你也看不到对方。属于更强的社交动作。 |
+| 静音 Mute | 你不再看到这个账号的推文，对方不会收到通知，仍能关注你 |
+| 屏蔽 Block | 对方无法关注你或与你互动，你也看不到对方 |
 
-- **只有你点击才会执行**，没有静默自动拉黑。
-- 优先点 X 原生「···」菜单；失败则尝试同登录态下的 X web API（需浏览器已登录 x.com）。
-- Headless / 无界面环境：原生菜单点击不可用，请在真实浏览器会话中使用。
+手动静音和屏蔽优先点 X 原生「···」菜单，失败再走同登录态下的 web API。无界面环境里原生菜单点不到，需要在真实浏览器会话中使用。
 
-## 测试
+## 已知限制
 
-```bash
-npm test -w extension
-```
+- 只保证 Chrome MV3。WXT 结构便于以后加 Firefox，但尚未适配。
+- 未上架 Chrome Web Store，当前只能从源码加载，或解压 release 里的 zip。
+- 自动屏蔽没有作者级证据累积，一条高分回复就可能触发。误判只能事后撤销。
+- 去重按 handle 记账，`userId` 尚未从 DOM 解析。
+- 自动屏蔽、限速、熔断、撤销链路尚未在真实浏览器会话中验证，只有类型检查、单元测试和构建覆盖。
+- `worker/` 是 0.1.0 时代的代理，扩展已不再调用，说明见 [docs/legacy-proxy.md](docs/legacy-proxy.md)。
 
-## Firefox / 上架尚未完成
+## 开发
 
-- v1 只保证 **Chrome MV3**；WXT 结构便于以后加 Firefox，但尚未适配与打包验证。  
-- Chrome Web Store：需正式隐私政策定稿、商店截图、更精致图标、权限最小化复核、付费/账号流程（若有）等；当前 `docs/privacy-policy.md` 仅为草稿。
+| 命令 | 作用 |
+|---|---|
+| `npm run dev` | WXT 开发模式 |
+| `npm run build` | 构建到 `extension/.output/chrome-mv3` |
+| `npm run unpacked` | 构建并镜像到 `unpacked/chrome-mv3` |
+| `npm test` | 运行单元测试 |
+| `npm run typecheck` | TypeScript 类型检查 |
+| `npm run zip` | 产出可上传商店的 zip |
+| `npm run release:build` | 类型检查、测试、zip、镜像未打包目录 |
+
+## 文档
+
+- [架构说明](docs/architecture.md)：请求链路、端点预设、BYOK 边界
+- [旧版代理](docs/legacy-proxy.md)：`worker/` 的用途与 curl 示例
+- [隐私政策草稿](docs/privacy-policy.md)
+- [变更记录](CHANGELOG.md)
 
 ## License
 
-MIT. 参考代码来自 MIT 项目 slop-filter，本仓库为独立实现。
+MIT。参考了 [slop-filter](https://github.com/adamnroman/slop-filter)（MIT）与 [BotBlind 指南](https://botblind.app/how-to-hide-ai-replies-on-x)，未 fork，独立实现。
