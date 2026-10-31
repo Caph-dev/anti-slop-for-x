@@ -10,9 +10,16 @@ export default defineConfig({
     name: '__MSG_extName__',
     description: '__MSG_extDescription__',
     default_locale: 'en',
-    version: '0.1.0',
+    version: '0.2.0',
     permissions: ['storage', 'activeTab'],
+    // The upstream is whatever the user configures (BYOK), so host access is
+    // requested at runtime from the options page via optional_host_permissions.
+    optional_host_permissions: ['https://*/*'],
     host_permissions: [
+      // Built-in endpoint presets work with no extra prompt; `custom` base URLs
+      // go through optional_host_permissions + a runtime request.
+      'https://api.typesafe.ai/*',
+      'https://api.openai.com/*',
       'https://x.com/*',
       'https://twitter.com/*',
       'http://127.0.0.1/*',

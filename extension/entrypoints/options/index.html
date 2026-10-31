@@ -38,6 +38,19 @@
       <section class="card">
         <h2 data-i18n="sectionModel">Decision model</h2>
         <label class="field">
+          <span data-i18n="endpointPreset">Endpoint</span>
+          <select id="endpointPreset">
+            <option value="jev-official" data-i18n="presetJev">TypeSafe / Jev (official)</option>
+            <option value="openai-official" data-i18n="presetOpenAI">OpenAI Decisions (official, contract unverified)</option>
+            <option value="custom" data-i18n="presetCustom">Custom endpoint</option>
+          </select>
+        </label>
+        <p class="hint" id="presetNote" data-i18n="presetOpenAINote" hidden>
+          Points at https://api.openai.com/v1/decisions. That route accepts a Bearer API key, but its
+          request/response contract has not been verified end to end — test it before relying on it,
+          and pick Custom if your account expects a different shape.
+        </p>
+        <label class="field">
           <span data-i18n="protocol">Protocol</span>
           <select id="protocol">
             <option value="jev">TypeSafe / Jev (noul/choice/score)</option>
@@ -45,12 +58,8 @@
           </select>
         </label>
         <label class="field">
-          <span data-i18n="workerBaseUrl">Worker base URL (proxy)</span>
-          <input type="url" id="workerBaseUrl" placeholder="http://127.0.0.1:8787" />
-        </label>
-        <label class="field">
           <span data-i18n="upstreamBaseUrl">Upstream base URL</span>
-          <input type="url" id="upstreamBaseUrl" placeholder="https://ai.caph.me/v1" />
+          <input type="url" id="upstreamBaseUrl" placeholder="https://api.typesafe.ai/v1" />
         </label>
         <label class="field">
           <span data-i18n="upstreamPath">Decisions path (optional)</span>
@@ -61,7 +70,7 @@
           <input type="text" id="model" placeholder="jev-latest" />
         </label>
         <label class="field">
-          <span data-i18n="apiKey">API key (stored in extension only)</span>
+          <span data-i18n="apiKey">Your own API key (stored in this browser only)</span>
           <input type="password" id="apiKey" autocomplete="off" />
         </label>
         <label class="field">

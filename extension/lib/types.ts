@@ -2,6 +2,12 @@
 
 export type ProtocolType = 'jev' | 'openai-decisions';
 
+/**
+ * Which upstream the extension talks to. The two official presets carry their
+ * own base URL / path / protocol / model; `custom` uses the user's fields.
+ */
+export type EndpointPreset = 'jev-official' | 'openai-official' | 'custom';
+
 export type ScanScope = 'replies-only' | 'timeline-and-replies';
 
 export interface Settings {
@@ -13,7 +19,9 @@ export interface Settings {
   shortTextMaxChars: number;
   skipOwnPosts: boolean;
   prefilterOnly: boolean; // skip model
-  workerBaseUrl: string;
+  /** Built-in endpoint preset, or `custom` to use the fields below. */
+  endpointPreset: EndpointPreset;
+  /** User's own model endpoint (used when endpointPreset is `custom`). */
   upstreamBaseUrl: string;
   upstreamPath: string;
   apiKey: string;
@@ -33,8 +41,8 @@ export const DEFAULT_SETTINGS: Settings = {
   shortTextMaxChars: 12,
   skipOwnPosts: true,
   prefilterOnly: false,
-  workerBaseUrl: 'http://127.0.0.1:8787',
-  upstreamBaseUrl: 'https://ai.caph.me/v1',
+  endpointPreset: 'jev-official',
+  upstreamBaseUrl: 'https://api.typesafe.ai/v1',
   upstreamPath: '/systemone',
   apiKey: '',
   model: 'jev-latest',

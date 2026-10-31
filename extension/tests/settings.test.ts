@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { loadSettings, saveSettings, settingsKey } from '../lib/settings';
 import { DEFAULT_SETTINGS } from '../lib/types';
+import { ENDPOINT_PRESETS, resolveEndpoint } from '../lib/endpoints';
+import { resolveUpstreamPath } from '../lib/adapters';
 
 type Store = Record<string, unknown>;
 
@@ -77,5 +79,86 @@ describe('settings storage', () => {
     expect(saved.threshold).toBe(0.42);
     expect(store.antiSlopForXSettings).toMatchObject({ threshold: 0.42 });
     expect(store.slopShieldSettings).toBeUndefined();
+  });
+
+  it('infers an endpoint preset for settings saved before presets existed', async () => {
+    installChrome({
+      antiSlopForXSettings: {
+        upstreamBaseUrl: 'https://gateway.example.com/v1',
+        upstreamPath: '/decide',
+        protocol: 'jev',
+      },
+    });
+
+    const loaded = await loadSettings();
+
+    expect(loaded.endpointPreset).toBe('custom');
+    expect(loaded.upstreamBaseUrl).toBe('https://gateway.example.com/v1');
+  });
+
+  it('defaults to the Jev preset when nothing is stored', async () => {
+    installChrome({});
+    const loaded = await loadSettings();
+    expect(loaded.endpointPreset).toBe('jev-official');
+  });
+
+  it('keeps a custom model when legacy settings map to a preset', async () => {
+    installChrome({
+      antiSlopForXSettings: {
+        upstreamBaseUrl: 'https://api.typesafe.ai/v1',
+        protocol: 'jev',
+        model: 'my-model',
+      },
+    });
+
+    const loaded = await loadSettings();
+    const endpoint = resolveEndpoint(loaded);
+
+    expect(loaded.endpointPreset).toBe('jev-official');
+    expect(endpoint.model).toBe('my-model');
+    expect(endpoint.baseUrl).toBe(ENDPOINT_PRESETS['jev-official'].baseUrl);
+  });
+
+  it('keeps the URL identical when a legacy Jev settings object has no path', async () => {
+    installChrome({
+      antiSlopForXSettings: { upstreamBaseUrl: 'https://api.typesafe.ai/v1', protocol: 'jev' },
+    });
+
+    const loaded = await loadSettings();
+
+    expect(loaded.endpointPreset).toBe('jev-official');
+    expect(resolveUpstreamPath(loaded)).toBe(ENDPOINT_PRESETS['jev-official'].path);
+    expect(resolveEndpoint(loaded).path).toBe(ENDPOINT_PRESETS['jev-official'].path);
+  });
+
+  it('does not repoint an OpenAI base URL that had no explicit path', async () => {
+    installChrome({
+      antiSlopForXSettings: {
+        upstreamBaseUrl: 'https://api.openai.com/v1',
+        protocol: 'openai-decisions',
+      },
+    });
+
+    const loaded = await loadSettings();
+
+    // Before presets this resolved to /systemone (the default path), so the
+    // migration must not silently switch it to /decisions.
+    expect(loaded.endpointPreset).toBe('custom');
+    expect(resolveEndpoint(loaded).path).toBe('/systemone');
+  });
+
+  it('maps an OpenAI base URL with the explicit /decisions path to the preset', async () => {
+    installChrome({
+      antiSlopForXSettings: {
+        upstreamBaseUrl: 'https://api.openai.com/v1',
+        protocol: 'openai-decisions',
+        upstreamPath: '/decisions',
+      },
+    });
+
+    const loaded = await loadSettings();
+
+    expect(loaded.endpointPreset).toBe('openai-official');
+    expect(resolveEndpoint(loaded).path).toBe('/decisions');
   });
 });

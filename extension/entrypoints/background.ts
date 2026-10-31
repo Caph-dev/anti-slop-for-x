@@ -1,6 +1,6 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { loadSettings } from '../lib/settings';
-import { decideViaWorker, ProxyError } from '../lib/proxy-client';
+import { decideUpstream, UpstreamError } from '../lib/upstream-client';
 import type { PostExtract, Settings } from '../lib/types';
 
 export default defineBackground(() => {
@@ -27,10 +27,10 @@ export default defineBackground(() => {
         try {
           const settings = (msg.settings as Settings) || (await loadSettings());
           const post = msg.post as PostExtract;
-          const raw = await decideViaWorker(post, settings);
+          const raw = await decideUpstream(post, settings);
           sendResponse({ ok: true, raw });
         } catch (e) {
-          const err = e as ProxyError;
+          const err = e as UpstreamError;
           sendResponse({
             ok: false,
             error: err?.message || String(e),

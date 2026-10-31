@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.0 — 2026-10-31
+
+### 端点预设 / Endpoint presets
+
+内置 3 档端点：TypeSafe / Jev 官方、OpenAI Decisions 官方、Custom。
+Three endpoints ship built in: TypeSafe / Jev official, OpenAI Decisions official, and Custom.
+
+- 新增 `endpointPreset` 设置与 `extension/lib/endpoints.ts`；预设拥有 Base URL / path / 协议，选中时选项页自动填充并锁定这三项；model 始终可改，预设只给默认值。
+- New `endpointPreset` setting backed by `extension/lib/endpoints.ts`; a preset owns base URL, path and protocol, which the options page fills and locks. `model` stays editable with the preset value as its default.
+- 官方预设：`jev-official`（`https://api.typesafe.ai/v1` + `/systemone`，`jev`，`jev-latest`）与 `openai-official`（`https://api.openai.com/v1` + `/decisions`，`openai-decisions`，`gpt-6-luna`）。
+- Presets: `jev-official` and `openai-official` as above.
+- 两个官方预设的 origin 加入 `host_permissions`（`https://api.typesafe.ai/*`、`https://api.openai.com/*`），保存不弹授权窗；`custom` 仍走 `optional_host_permissions`。
+- Both preset origins are declared in `host_permissions`, so they need no prompt; `custom` still uses `optional_host_permissions`.
+- OpenAI 预设标记为「契约未验证」：已探测该路由存在且接受 Bearer 鉴权，但 model id 与报文形状未用真实 key 验证。
+- The OpenAI preset is labelled contract-unverified: the route exists and accepts Bearer auth, but the model id and payload shape are not verified with a real key.
+- 旧设置（无 `endpointPreset`）按 base URL + 协议 + 有效 path 反推预设；显式 path 缺失时按旧默认 `/systemone` 比较，所以 OpenAI base + 无 path 的旧配置会保持 `custom`，不会被悄悄改到 `/decisions`。
+- Legacy settings are mapped back to a preset only on an exact match; anything else becomes `custom`.
+
+### BYOK 直连 / Direct BYOK calls
+
+去掉代理层：扩展直接请求你配置的上游 endpoint，不再需要 Worker / 本地代理。
+Dropped the proxy layer: the extension now calls your configured upstream endpoint directly.
+
+- 删除「Worker 代理地址」设置项（`workerBaseUrl`），请求改为 `extension/lib/upstream-client.ts` 直发上游；`proxy-client.ts` 移除。
+- Removed the `workerBaseUrl` setting; requests go out via `extension/lib/upstream-client.ts`; `proxy-client.ts` is gone.
+- 请求在 background service worker 发出（content script 的 fetch 永远受页面 CORS 约束），模型调用仍经由 `ANTI_SLOP_DECIDE` 消息。
+- Model calls stay in the background service worker, since content-script fetches are subject to the page's CORS policy.
+- 自定义 base URL 走 `optional_host_permissions` + 保存/测试时的 `chrome.permissions.request()`。
+- Custom base URLs use `optional_host_permissions` plus a runtime permission request from the options page.
+- `buildUpstreamUrl()` 要求 https，仅对 `127.0.0.1` / `localhost` 放行 http，避免 key 明文发往远端。
+- `buildUpstreamUrl()` requires https except for loopback hosts, so the key is never sent in clear text to a remote endpoint.
+- 选项页「测试」按钮改为真实发一次模型请求并显示分数，不再打 `/health`。
+- The options page Test button now performs one real model call and reports the score.
+- `worker/` 保留但扩展不再使用；其 `/v1/decide` 契约与直连请求不同。
+- `worker/` is kept but unused; its `/v1/decide` contract differs from the direct request.
+
 ## 0.1.0 — rename
 
 临时产品名 **Slop Shield**（包名 `slop-shield`，Worker `slop-shield-proxy`）改为 **Anti Slop for X**（包名 `anti-slop-for-x`，Cloudflare Worker `name` 为 `anti-slop-for-x-proxy`）。

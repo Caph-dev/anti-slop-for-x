@@ -1,5 +1,5 @@
 import { runPrefilter } from './prefilter';
-import { decideViaWorker, ProxyError } from './proxy-client';
+import { decideUpstream, UpstreamError } from './upstream-client';
 import { scoreFromUpstream } from './adapters';
 import { getCached, setCached } from './cache';
 import type { DecisionResult, PostExtract, Settings } from './types';
@@ -14,13 +14,13 @@ async function callModel(post: PostExtract, settings: Settings): Promise<unknown
         settings,
       });
       if (resp?.ok) return resp.raw;
-      throw new ProxyError(resp?.error || 'Background decide failed', resp?.status ?? 0, resp?.detail || '');
+      throw new UpstreamError(resp?.error || 'Background decide failed', resp?.status ?? 0, resp?.detail || '');
     }
   } catch (e) {
-    if (e instanceof ProxyError) throw e;
+    if (e instanceof UpstreamError) throw e;
     // fall through to direct (Node tests / non-extension)
   }
-  return decideViaWorker(post, settings);
+  return decideUpstream(post, settings);
 }
 
 export async function scorePost(

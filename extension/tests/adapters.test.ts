@@ -43,7 +43,7 @@ describe('openai-decisions adapter', () => {
     const p = buildOpenAIDecisionsPayload(post, {
       ...DEFAULT_SETTINGS,
       protocol: 'openai-decisions',
-      model: 'gpt-5',
+      model: 'gpt-6-luna',
     });
     expect(p.questions[0].type).toBe('predicate');
     expect(p.questions[1].type).toBe('choice');

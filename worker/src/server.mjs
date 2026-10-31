@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Local mock / proxy for Anti Slop for X.
- * Extension → this server → upstream (ai.caph.me etc.) with Authorization from the request.
+ * Extension → this server → upstream (api.typesafe.ai etc.) with Authorization from the request.
  * No API keys stored here. Cloudflare Worker deploy comes later (see cf-worker.ts).
  */
 import http from 'node:http';

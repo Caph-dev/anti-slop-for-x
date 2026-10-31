@@ -33,7 +33,7 @@ export function buildOpenAIDecisionsPayload(
   if (post.parentText) parts.unshift(`Parent:\n${post.parentText}\n`);
 
   return {
-    model: settings.model || 'gpt-5',
+    model: settings.model || 'gpt-6-luna',
     input: parts.join('\n'),
     questions: [
       {

@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS, type Settings } from './types';
+import { deriveEndpointPreset } from './endpoints';
 
 const KEY = 'antiSlopForXSettings';
 /** Pre-rename chrome.storage.local key (temporary name slop-shield). Read once, then removed. */
@@ -11,16 +12,28 @@ export async function loadSettings(): Promise<Settings> {
 
   if (current) {
     if (legacy) await chrome.storage.local.remove(LEGACY_KEY);
-    return { ...DEFAULT_SETTINGS, ...current };
+    return normalize(current);
   }
 
   if (legacy) {
     await chrome.storage.local.set({ [KEY]: legacy });
     await chrome.storage.local.remove(LEGACY_KEY);
-    return { ...DEFAULT_SETTINGS, ...legacy };
+    return normalize(legacy);
   }
 
   return { ...DEFAULT_SETTINGS };
+}
+
+/**
+ * Settings written before `endpointPreset` existed get one inferred from their
+ * base URL + protocol, so an upgrade never silently repoints the upstream.
+ */
+function normalize(raw: Partial<Settings>): Settings {
+  const merged = { ...DEFAULT_SETTINGS, ...raw };
+  if (raw.endpointPreset === undefined) {
+    merged.endpointPreset = deriveEndpointPreset(raw);
+  }
+  return merged;
 }
 
 export async function saveSettings(partial: Partial<Settings>): Promise<Settings> {

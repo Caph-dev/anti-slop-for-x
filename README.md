@@ -1,6 +1,6 @@
 # Anti Slop for X
 
-在 X（x.com）上检测 AI 注水 / 机器人回复：本地关键词预筛 +（可选）决策模型；超过阈值则折叠并显示分数/原因；**Mute / Block 仅在你点击时触发**。扩展只与自有 Worker 代理通信，不直连上游模型 API。
+在 X（x.com）上检测 AI 注水 / 机器人回复：本地关键词预筛 +（可选）决策模型；超过阈值则折叠并显示分数/原因；**Mute / Block 仅在你点击时触发**。扩展不含任何 key、也不含服务器：你填自己的上游 endpoint 与 key（BYOK），请求直接从扩展发往你配置的地址。
 
 > 参考了 [slop-filter](https://github.com/adamnroman/slop-filter)（MIT）与 [BotBlind 指南](https://botblind.app/how-to-hide-ai-replies-on-x)；**未 fork**，独立实现。
 
@@ -40,9 +40,9 @@ extension/.output/chrome-mv3
 npm run dev -w extension
 ```
 
-## 怎么跑本地 Worker（mock / proxy）
+## 本地 Worker（旧版代理，扩展已不再使用）
 
-当前 **不绑定真实 Cloudflare 账号**。本地 Node 服务即可：
+`v0.1.0` 之前扩展经由本机代理转发；现在走 BYOK 直连，这一节仅在你想自己搭服务端代理时参考。
 
 ```bash
 npm run worker:start
@@ -50,11 +50,13 @@ npm run worker:start
 ```
 
 - `GET /health` — 探活  
-- `POST /v1/decide` — 转发扩展带来的 `Authorization` 与 `payload` 到上游  
+- `POST /v1/decide` — 接收 `upstreamBaseUrl` / `payload` 并转发，`Authorization` 来自请求本身
 
 环境变量：`PORT`（默认 8787）、`HOST`（默认 127.0.0.1）。
 
-以后若部署 CF：见 `worker/wrangler.toml` 与 `worker/src/cf-worker.ts`，再把选项里的 Worker 地址改成线上 URL。
+> 注意：该代理当前的 body 契约与扩展的直连请求不同，不能直接把 `upstreamBaseUrl` 指向它。
+
+CF 部署见 `worker/wrangler.toml` 与 `worker/src/cf-worker.ts`。
 
 ### 用 curl 打通 Worker → Jev
 
@@ -72,7 +74,7 @@ curl -sS -X POST http://127.0.0.1:8787/v1/decide \
   -H "Content-Type: application/json" \
   -d '{
     "protocol": "jev",
-    "upstreamBaseUrl": "https://ai.caph.me/v1",
+    "upstreamBaseUrl": "https://api.typesafe.ai/v1",
     "upstreamPath": "/systemone",
     "model": "jev-latest",
     "payload": {
@@ -88,33 +90,34 @@ curl -sS -X POST http://127.0.0.1:8787/v1/decide \
   }'
 ```
 
-## 怎么把设置指到 Jev
+## 端点选择（3 档）
 
-在扩展选项页：
+选项页的 **Endpoint** 决定 Base URL、决策路径与协议；选中官方预设时这三个字段自动填好并锁定，选 `Custom` 才能编辑。**Model 始终可改**，预设只提供默认值。
 
-| 字段 | 建议值 |
-|------|--------|
-| Protocol | `TypeSafe / Jev` |
-| Worker base URL | `http://127.0.0.1:8787` |
-| Upstream base URL | `https://ai.caph.me/v1` |
-| Decisions path | `/systemone` |
-| Model | `jev-latest` |
-| API key | 填入你的 Jev key（只存 `chrome.storage.local`） |
+| Endpoint | Base URL | Path | Protocol | 默认 Model |
+|---|---|---|---|---|
+| TypeSafe / Jev（官方） | `https://api.typesafe.ai/v1` | `/systemone` | `jev` | `jev-latest` |
+| OpenAI Decisions（官方，契约未验证） | `https://api.openai.com/v1` | `/decisions` | `openai-decisions` | `gpt-6-luna` |
+| Custom endpoint | 你填 | 你填 | 你选 | 你填 |
 
-也支持 **OpenAI Decisions**（`predicate` / `choice` / `score`）：协议选对应项，path 通常为 `/decisions`，上游换成兼容端点。
+- 两个官方预设的 origin 已在 `host_permissions` 里，保存不会弹权限窗。
+- 选 `Custom` 且换到别的 origin 时，点「保存」会让 Chrome 弹出该 origin 的访问授权（`optional_host_permissions`）；拒绝授权后请求会失败并提示重新保存。
+- 旧版设置（没有 `endpointPreset` 字段）会按 Base URL + 协议 + 有效 path 自动归位；凡是和官方预设不完全一致的，一律归为 `Custom`，不会被静默改指。
+- OpenAI 预设的验证程度：`POST https://api.openai.com/v1/decisions` 存在且会对 `Authorization: Bearer` 返回 `invalid_api_key`（说明接受 API key 鉴权），但**模型 id 与 `predicate/choice/score` 请求/响应契约尚未用真实 key 端到端验证**。若你的账号要求别的形状，请选 `Custom`。
 
 ### Key 放哪？
 
-- **推荐**：key 只在扩展存储；Worker 只做 CORS 安全代理并转发 `Authorization`。  
-- **备选（CF 部署后）**：Worker 用 secret 存上游 key，扩展带自签 token；见 `docs/architecture.md`。  
-- **不要**把真实 Jev key 提交进本仓库。
+- key 只存在 `chrome.storage.local`，只发往你填的 Base URL；扩展包、仓库、release 产物里都没有 key。
+- 请求在 background service worker 里发出（content script 受页面 CORS 限制，service worker 有 host permission 不受限）。
+- 局限：能读你 Chrome profile 目录的本机进程仍能拿到明文 key，这是任何「把 key 存在浏览器里」的方案都躲不掉的。
+- **不要**把真实 Jev key 提交进本仓库，也不要把选项页截图连 key 一起发出去。
 
 ## 预筛与模型如何配合
 
 1. **本地预筛**（BotBlind 风格）：套话、"It's not X, it's Y"、空洞夸赞、模板 emoji、用户名尾随数字、超快长回复、DM/空投诱饵等 → 得到 0..1 分数。  
 2. 分数已很高或命中硬规则 → **可直接折叠**，不必打模型。  
 3. 勾选「仅预筛」→ 永不调用模型。  
-4. 否则边缘样本经 Worker 打决策模型，与预筛分混合后与阈值比较。  
+4. 否则边缘样本经 background service worker 打决策模型，与预筛分混合后与阈值比较。  
 5. 按帖子 id 缓存；并发限制 + 视口触发；可白名单账号；可关自动扫描，点扩展图标手动扫当前页。
 
 ## Mute / Block 怎么用
