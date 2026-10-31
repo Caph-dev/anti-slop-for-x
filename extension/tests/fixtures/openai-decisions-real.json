@@ -1,0 +1,20 @@
+{
+  "model": "gpt-6-luna",
+  "answers": [
+    {
+      "type": "predicate",
+      "name": "is_slop",
+      "probability": 0.56
+    },
+    {
+      "type": "choice",
+      "name": "bait_kind",
+      "choice": "praise_bot"
+    },
+    {
+      "type": "score",
+      "name": "bot_likelihood",
+      "score": 1.98
+    }
+  ]
+}

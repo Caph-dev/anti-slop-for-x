@@ -30,18 +30,14 @@ const STR: Record<string, Record<string, string>> = {
     sectionModel: 'Decision model',
     endpointPreset: 'Endpoint',
     presetJev: 'TypeSafe / Jev (official)',
-    presetOpenAI: 'OpenAI Decisions (official, contract unverified)',
+    presetOpenAI: 'OpenAI Decisions (official)',
     presetCustom: 'Custom endpoint',
-    presetOpenAINote:
-      'Points at https://api.openai.com/v1/decisions. That route accepts a Bearer API key, but its request/response contract has not been verified end to end — test it before relying on it, and pick Custom if your account expects a different shape.',
     protocol: 'Protocol',
     upstreamBaseUrl: 'Upstream base URL',
     upstreamPath: 'Decisions path (optional)',
     model: 'Model',
     apiKey: 'Your own API key (stored in this browser only)',
     defaultPrompt: 'Default prompt',
-    keyHint:
-      'No proxy: you paste your own key and it is sent only to the base URL above. Saving asks Chrome for host access to that origin. Keep the key out of screenshots and shared config files.',
     sectionWhitelist: 'Account whitelist',
     whitelistHelp: 'Handles (one per line, without @)',
     save: 'Save',
@@ -69,18 +65,14 @@ const STR: Record<string, Record<string, string>> = {
     sectionModel: '决策模型',
     endpointPreset: '端点',
     presetJev: 'TypeSafe / Jev（官方）',
-    presetOpenAI: 'OpenAI Decisions（官方，契约未验证）',
+    presetOpenAI: 'OpenAI Decisions（官方）',
     presetCustom: '自定义端点',
-    presetOpenAINote:
-      '指向 https://api.openai.com/v1/decisions。该路由接受 Bearer API Key，但请求/响应契约尚未端到端验证：先用「测试连接」确认，若你的账号要求别的形状请改用自定义端点。',
     protocol: '协议类型',
     upstreamBaseUrl: '上游 Base URL',
     upstreamPath: '决策路径（可选）',
     model: '模型名',
     apiKey: '你自己的 API Key（仅存本浏览器）',
     defaultPrompt: '默认提示词',
-    keyHint:
-      '没有代理层：你填自己的 key，它只会发往上面的 Base URL。保存时 Chrome 会请求该 origin 的访问权限。不要把 key 截图或写进共享配置文件。',
     sectionWhitelist: '账号白名单',
     whitelistHelp: '用户名（每行一个，不要 @）',
     save: '保存',
@@ -159,9 +151,6 @@ function applyPreset(preset: EndpointPreset, from?: Settings) {
     const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
     if (el) el.disabled = locked;
   }
-
-  const note = document.getElementById('presetNote');
-  if (note) note.hidden = preset !== 'openai-official';
 }
 
 function readForm(): Partial<Settings> {

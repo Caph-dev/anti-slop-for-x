@@ -114,13 +114,13 @@ curl -sS -X POST http://127.0.0.1:8787/v1/decide \
 | Endpoint | Base URL | Path | Protocol | 默认 Model |
 |---|---|---|---|---|
 | TypeSafe / Jev（官方） | `https://api.typesafe.ai/v1` | `/systemone` | `jev` | `jev-latest` |
-| OpenAI Decisions（官方，契约未验证） | `https://api.openai.com/v1` | `/decisions` | `openai-decisions` | `gpt-6-luna` |
+| OpenAI Decisions（官方） | `https://api.openai.com/v1` | `/decisions` | `openai-decisions` | `gpt-6-luna` |
 | Custom endpoint | 你填 | 你填 | 你选 | 你填 |
 
 - 两个官方预设的 origin 已在 `host_permissions` 里，保存不会弹权限窗。
 - 选 `Custom` 且换到别的 origin 时，点「保存」会让 Chrome 弹出该 origin 的访问授权（`optional_host_permissions`）；拒绝授权后请求会失败并提示重新保存。
 - 旧版设置（没有 `endpointPreset` 字段）会按 Base URL + 协议 + 有效 path 自动归位；凡是和官方预设不完全一致的，一律归为 `Custom`，不会被静默改指。
-- OpenAI 预设的验证程度：`POST https://api.openai.com/v1/decisions` 存在且会对 `Authorization: Bearer` 返回 `invalid_api_key`（说明接受 API key 鉴权），但**模型 id 与 `predicate/choice/score` 请求/响应契约尚未用真实 key 端到端验证**。若你的账号要求别的形状，请选 `Custom`。
+- OpenAI 预设已用真实 key 验证（2026-10-31）：`gpt-6-luna` 在 `/v1/models` 中可见，`POST https://api.openai.com/v1/decisions` 返回 HTTP 200，`answers[]` 的 `probability` / `choice` / `score` 与解析器一致；该真实响应已固化为测试夹具 `extension/tests/fixtures/openai-decisions-real.json`。
 
 ### Key 放哪？
 

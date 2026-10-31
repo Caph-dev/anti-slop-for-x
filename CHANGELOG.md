@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1 — 2026-10-31
+
+OpenAI Decisions 预设从「契约未验证」转为已验证；选项页去掉多余提示文本。
+The OpenAI Decisions preset is now verified, and the options page lost its redundant hint text.
+
+- **OpenAI Decisions 预设有真实 key 验证**（2026-10-31）：`gpt-6-luna` 存在于 `/v1/models`（key 有效，130 个模型可见），`POST https://api.openai.com/v1/decisions` 返回 HTTP 200，响应 `answers[]` 的 `probability` / `choice` / `score` 与解析器一致。真实响应已作为夹具加入 `extension/tests/fixtures/openai-decisions-real.json`，并有回归测试锁住打分结果。
+- **The OpenAI Decisions preset is now verified with a real key** (2026-10-31): `gpt-6-luna` appears in `/v1/models`, the endpoint returns HTTP 200, and `answers[]` matches the parser. The real response is now a test fixture with a regression test.
+- 选项页删掉两段多余提示文本（`presetNote`、`keyHint`）以及「契约未验证」标注；`keyHint` 的内联默认文案还停留在 Worker 代理时代，已一并移除。
+- Removed two redundant hint paragraphs from the options page plus the "contract unverified" label; the `keyHint` inline default still described the old Worker proxy.
+
 ## 0.3.0 — 2026-10-31
 
 本版只改工具链与发布流程，扩展运行时行为与 0.2.0 相同。

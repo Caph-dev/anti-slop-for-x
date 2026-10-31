@@ -5,6 +5,7 @@ import {
   scoreFromOpenAIDecisions,
 } from '../lib/adapters/openai-decisions';
 import { DEFAULT_SETTINGS } from '../lib/types';
+import realDecision from './fixtures/openai-decisions-real.json';
 
 const post = {
   id: '9',
@@ -49,6 +50,16 @@ describe('openai-decisions adapter', () => {
     expect(p.questions[1].type).toBe('choice');
     expect(p.questions[2].type).toBe('score');
     expect(p.input).toContain('Parent:');
+  });
+
+  it('parses a real /v1/decisions response captured on 2026-10-31', () => {
+    // Captured from POST https://api.openai.com/v1/decisions with
+    // model gpt-6-luna and the payload this adapter builds.
+    const { score, reason } = scoreFromOpenAIDecisions(realDecision);
+    expect(reason).toContain('predicate=0.56');
+    expect(reason).toContain('kind=praise_bot');
+    // 0.55 * 0.56 + 0.45 * (1.98 / 4) ≈ 0.531, floored to 0.55 by the choice.
+    expect(score).toBeCloseTo(0.55, 5);
   });
 
   it('scores from predicate probability', () => {

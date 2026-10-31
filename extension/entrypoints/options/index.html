@@ -41,15 +41,10 @@
           <span data-i18n="endpointPreset">Endpoint</span>
           <select id="endpointPreset">
             <option value="jev-official" data-i18n="presetJev">TypeSafe / Jev (official)</option>
-            <option value="openai-official" data-i18n="presetOpenAI">OpenAI Decisions (official, contract unverified)</option>
+            <option value="openai-official" data-i18n="presetOpenAI">OpenAI Decisions (official)</option>
             <option value="custom" data-i18n="presetCustom">Custom endpoint</option>
           </select>
         </label>
-        <p class="hint" id="presetNote" data-i18n="presetOpenAINote" hidden>
-          Points at https://api.openai.com/v1/decisions. That route accepts a Bearer API key, but its
-          request/response contract has not been verified end to end — test it before relying on it,
-          and pick Custom if your account expects a different shape.
-        </p>
         <label class="field">
           <span data-i18n="protocol">Protocol</span>
           <select id="protocol">
@@ -77,9 +72,6 @@
           <span data-i18n="defaultPrompt">Default prompt</span>
           <textarea id="defaultPrompt" rows="2"></textarea>
         </label>
-        <p class="hint" data-i18n="keyHint">
-          The API key stays in chrome.storage.local. The Worker is a CORS-safe proxy and forwards your Authorization header. Do not put the real key in the Worker repo.
-        </p>
       </section>
 
       <section class="card">
