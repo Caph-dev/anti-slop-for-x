@@ -1,7 +1,7 @@
 {
   "name": "anti-slop-for-x",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Detect and fold AI-slop / bot replies on X (x.com)",
   "workspaces": [
     "extension",
@@ -11,6 +11,8 @@
     "dev": "npm run dev -w extension",
     "build": "npm run build -w extension",
     "zip": "npm run zip -w extension",
+    "unpacked": "npm run build && node scripts/sync-unpacked.mjs",
+    "release:build": "npm run typecheck && npm run test && npm run zip && node scripts/sync-unpacked.mjs",
     "test": "npm run test -w extension",
     "typecheck": "npm run typecheck -w extension",
     "worker:dev": "npm run dev -w worker",

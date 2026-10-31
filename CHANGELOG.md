@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0 — 2026-10-31
+
+本版只改工具链与发布流程，扩展运行时行为与 0.2.0 相同。
+Tooling and release-flow only; runtime behaviour is unchanged from 0.2.0.
+
+### 稳定的未打包目录 / Stable unpacked build
+
+- 新增 `npm run unpacked`：构建后把 `extension/.output/chrome-mv3` 整体镜像到 `unpacked/chrome-mv3`，供 Chrome「加载已解压的扩展程序」长期加载。
+- New `npm run unpacked` mirrors the build into `unpacked/chrome-mv3` for Chrome's "Load unpacked".
+- 新增 `scripts/sync-unpacked.mjs`：先复制到临时目录再改名替换，Chrome 不会看到半成品；整体替换保证不残留上一次构建的 hash chunk；只允许替换 `unpacked/chrome-mv3`。
+- New `scripts/sync-unpacked.mjs` stages the copy then renames it into place, replaces the folder wholesale (no stale hashed chunks), and refuses to touch anything but `unpacked/chrome-mv3`.
+- `unpacked/` 加入 `.gitignore`，构建产物不进仓库、不进 release 资产。
+- `unpacked/` is git-ignored and never shipped.
+
+### 发布命令 / Release command
+
+- 新增 `npm run release:build`：`typecheck` → `test` → `zip` → 同步 `unpacked`，zip 与未打包目录出自同一次构建。
+- New `npm run release:build` runs typecheck, tests, zip and the unpacked mirror from a single build.
+- 新增项目级 `AGENTS.md`，固定「打包并更新 release」的流程：版本号 5 处同步、CHANGELOG 段落、`release:build`、tag 与 `gh release create`、release notes 必须写明未验证项。
+- Added a project-level `AGENTS.md` documenting the whole release flow.
+
 ## 0.2.0 — 2026-10-31
 
 ### 端点预设 / Endpoint presets

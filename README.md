@@ -15,24 +15,41 @@ anti-slop-for-x/
 
 ## 怎么装（Chrome 加载未打包扩展）
 
-1. 安装依赖并构建：
+1. 安装依赖：
 
 ```bash
 cd anti-slop-for-x
 npm install
-npm run build
 ```
 
-2. 打开 Chrome → `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」。
-3. 选择构建产物目录（一般为）：
+2. 生成一份稳定的未打包目录（Chrome 长期加载就用它，会自动先构建）：
+
+```bash
+npm run unpacked        # = npm run build + 镜像到 unpacked/chrome-mv3
+```
+
+3. 打开 Chrome → `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选择：
 
 ```text
-extension/.output/chrome-mv3
+unpacked/chrome-mv3
 ```
 
-（若目录名因 WXT 版本略有不同，以 `extension/.output/` 下实际 `manifest.json` 所在文件夹为准。）
-
 4. 打开扩展「选项」页配置（见下）。
+
+### 为什么单独放 `unpacked/`
+
+`extension/.output/chrome-mv3` 每次构建都会被重写、旧 hash 文件名会消失，Chrome 加载着它会报 manifest 读不到、必须重新加载。`npm run unpacked` 会整体替换 `unpacked/chrome-mv3`（先写临时目录再改名，不会出现半成品，也不会残留旧 chunk）。
+
+- 改代码后重新跑 `npm run unpacked`，再到 `chrome://extensions` 点一次刷新按钮即可。
+- `unpacked/` 在 `.gitignore` 里，不会进仓库，也不会进 release 资产；要发给别人用请用 `npm run zip` 的产物或 release 里的 zip。
+
+需要一次拿到「商店 zip」和「未打包目录」时：
+
+```bash
+npm run release:build   # typecheck + test + zip + 镜像到 unpacked/chrome-mv3
+```
+
+两者出自同一次构建，所以 zip 里的代码和你本地加载的完全一致。
 
 开发模式可用：
 
