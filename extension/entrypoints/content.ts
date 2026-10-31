@@ -178,6 +178,10 @@ async function boot() {
         return;
       }
 
+      // Two storage round trips ran since the dequeue check; re-read the mode
+      // right before the destructive call (TLA+ model: CallOnlyInStrict).
+      if (!settings.enabled || settings.scanMode !== 'strict') return;
+
       const r = await blockUser({
         screenName: post.handle,
         userId: post.userId,
