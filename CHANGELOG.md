@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 — 2026-10-31
+
+折叠卡片的三处体验调整：可再次折叠、静音/屏蔽加上语义说明、卡片不再显示内部字段。
+Three fold-card UX changes: the reply can be folded again, mute/block explain themselves, and the card no longer prints internal fields.
+
+- 折叠后可再次折叠：展开时卡片从推文里移除（避免在 X 的 flex 行里再次挤压正文），改为在时间戳后放一个可点击的 `AI? nn%` 药丸，点它重新折叠。
+- Re-foldable: expanding removes the card (it must not stay inside X's flex row) and leaves a clickable `AI? nn%` pill next to the timestamp that folds the reply again.
+- 卡片不再显示 `model:predicate=…, score=…, kind=…; pre=…` 这类内部字段，只显示疑似 AI 率；原始打分细节移到卡片的悬停提示里。
+- The card no longer prints internal fields; it shows just the AI likelihood, with the raw breakdown moved into the card's tooltip.
+- 「静音」「屏蔽」加上悬停说明，区分两者语义（静音＝你不再看到对方，对方无感知；屏蔽＝对方无法关注或与你互动）；README 增加对照表。
+- Mute and Block now carry hover explanations of the difference, and the README gained a comparison table.
+
 ## 0.4.0 — 2026-10-31
 
 修复折叠卡片与被折叠推文并排显示的布局 bug，以及 badge 模式下游离的动作条。
