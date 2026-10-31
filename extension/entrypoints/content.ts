@@ -1,7 +1,8 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
-import { loadSettings } from '../lib/settings';
+import { loadSettings, scoringSettingsChanged, settingsKey } from '../lib/settings';
 import { scorePost } from '../lib/scorer';
 import { createLimiter } from '../lib/concurrency';
+import { createScanState } from '../lib/scan-state';
 import {
   currentUserHandle,
   extractTweet,
@@ -10,7 +11,9 @@ import {
   parentTextFor,
 } from '../lib/x/dom';
 import { blockUser, muteUser, unblockUser } from '../lib/x/mute-block';
-import { alreadyMounted, clearMounted, mountResult } from '../lib/ui';
+import { alreadyMounted, clearMounted, mountDebugBadge, mountResult } from '../lib/ui';
+import { debugCacheKey, debugScoringSettings } from '../lib/debug';
+import { clearCache } from '../lib/cache';
 import { decide } from '../lib/mode';
 import { logAutoAction, type AutoActionEntry } from '../lib/action-log';
 import {
@@ -21,7 +24,7 @@ import {
   reserveAutoAction,
 } from '../lib/auto-guard';
 import { uiT } from '../lib/i18n-ui';
-import type { PostExtract, Settings } from '../lib/types';
+import type { DecisionResult, PostExtract, Settings } from '../lib/types';
 
 export default defineContentScript({
   matches: ['https://x.com/*', 'https://twitter.com/*'],
@@ -34,14 +37,66 @@ export default defineContentScript({
 async function boot() {
   let settings = await loadSettings();
   const t = uiT();
-  let limiter = createLimiter(settings.maxConcurrency);
-  const processed = new WeakSet<HTMLElement>();
+  // One limiter for the whole session; changing the cap never splits the queue.
+  const limiter = createLimiter(settings.maxConcurrency);
+  /**
+   * Per-node dedupe plus the generation that rejects scores computed under
+   * settings the user has since changed (see lib/scan-state.ts).
+   */
+  const scan = createScanState();
+  /** Debug badges only: lets a threshold change recolour without re-scoring. */
+  const debugScores = new WeakMap<HTMLElement, { postId: string; result: DecisionResult }>();
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
+    // Other local keys (the action log, auto-guard state) change all the time;
+    // reacting to them would throw away scores for an unchanged policy.
+    if (area !== 'local' || !changes[settingsKey()]) return;
     void loadSettings().then((s) => {
+      const prev = settings;
+      const debugToggled = s.debugMode !== prev.debugMode;
+      const scoringChanged = scoringSettingsChanged(prev, s);
+      const enabledChanged = s.enabled !== prev.enabled;
+      const thresholdChanged = s.threshold !== prev.threshold;
+
       settings = s;
-      limiter = createLimiter(s.maxConcurrency);
+      if (s.maxConcurrency !== prev.maxConcurrency) limiter.setMax(s.maxConcurrency);
+
+      // Invalidate first, unconditionally: a single save can change the model
+      // *and* flip debug mode, and both caches must react to it.
+      if (scoringChanged) clearCache();
+      if (debugToggled) clearCache('debug:');
+      if (scoringChanged || debugToggled || enabledChanged) scan.invalidate();
+
+      if (!s.enabled) {
+        unmountAll();
+        return;
+      }
+
+      if (scoringChanged || debugToggled || enabledChanged) {
+        // Every mounted card was decided under the old policy. Re-present the
+        // page when we are allowed to scan; with auto-scan off, a manual scan
+        // re-scores it (the cache was dropped, so nothing stale comes back).
+        if (s.debugMode || s.autoScan) {
+          unmountAll();
+          void scanVisible(s.debugMode);
+        } else if (debugToggled) {
+          unmountAll();
+        }
+        return;
+      }
+
+      // Display-only edit: the debug bands are relative to the threshold, so
+      // recolour the badges from the scores we already have instead of paying
+      // for another model call.
+      if (s.debugMode && thresholdChanged) {
+        for (const el of document.querySelectorAll<HTMLElement>('[data-anti-slop]')) {
+          const scored = debugScores.get(el);
+          // The same identity check the async path makes: X recycles nodes.
+          if (!scored || !el.isConnected) continue;
+          if (extractTweet(el)?.id !== scored.postId) continue;
+          mountDebugBadge(el, scored.result, s.threshold, t, scored.postId);
+        }
+      }
     });
   });
 
@@ -65,7 +120,8 @@ async function boot() {
     const tweet = extractTweet(el);
     if (!tweet) return null;
     const me = currentUserHandle();
-    if (settings.scanScope === 'replies-only' && !tweet.isReply) {
+    // Debug scores everything; the replies-only scope only saves model calls.
+    if (settings.scanScope === 'replies-only' && !tweet.isReply && !settings.debugMode) {
       // On a status page, still score replies; skip original / timeline roots
       const statusId = location.pathname.match(/\/status\/(\d+)/)?.[1];
       if (!statusId || tweet.id === statusId) return null;
@@ -86,14 +142,50 @@ async function boot() {
   /** Returns true when the post was actually scored and rendered. */
   async function handleArticle(el: HTMLElement, force = false): Promise<boolean> {
     if (!settings.enabled) return false;
-    if (!force && (processed.has(el) || alreadyMounted(el))) return false;
-    if (!isInViewport(el) && !force) return false;
+    // Debug is a full-page read: score every mounted post, not just the
+    // scrolled-past slice the normal viewport scheduling covers.
+    if (!force && !settings.debugMode && !isInViewport(el)) return false;
 
     const post = await toExtract(el);
     if (!post) return false;
-    processed.add(el);
+    if (!force && (scan.isProcessed(el, post.id) || alreadyMounted(el, post.id))) return false;
+    // Mounting a badge is itself a DOM mutation, so a scan can run again before
+    // the previous score returns. Never submit the same post twice.
+    const ticket = scan.begin(el, post.id);
+    if (!ticket) return false;
 
-    const result = await limiter.run(() => scorePost(post, settings));
+    const debug = settings.debugMode;
+    const scoringSettings = debug ? debugScoringSettings(settings) : settings;
+    const options = {
+      shouldCache: () => scan.isCurrent(ticket),
+      ...(debug ? { cacheKey: debugCacheKey(post.id) } : {}),
+    };
+
+    let result: DecisionResult | null;
+    try {
+      result = await limiter.run(async () => {
+        // The task may have waited in the queue while the settings changed,
+        // or the extension was switched off.
+        if (!settings.enabled || !scan.isCurrent(ticket)) return null;
+        return scorePost(post, scoringSettings, options);
+      });
+    } finally {
+      scan.end(el, ticket);
+    }
+
+    // Settings changed mid-flight: this score describes a policy that is gone.
+    if (!result || !scan.isCurrent(ticket) || !settings.enabled) return false;
+    // X recycles article nodes; never render post A's score on post B.
+    if (!el.isConnected || extractTweet(el)?.id !== post.id) return false;
+    scan.commit(el, post.id);
+
+    if (debug) {
+      // Read-only: no decide(), so no fold and no automatic block.
+      debugScores.set(el, { postId: post.id, result });
+      mountDebugBadge(el, result, settings.threshold, t, post.id);
+      return true;
+    }
+
     const decision = decide(result, settings);
     if (decision.presentation === 'none') return false;
 
@@ -109,7 +201,7 @@ async function boot() {
           toast(r.ok ? t('blockOk') : `${t('actionFail')}: ${r.detail || r.method}`);
         });
       },
-    }, t);
+    }, t, post.id);
 
     if (decision.autoBlock) scheduleAutoBlock(post, result.score);
     return true;
@@ -158,7 +250,7 @@ async function boot() {
     autoQueue = autoQueue.then(async () => {
       const now = Date.now();
       // Re-check the world: the user may have changed mode or disabled us.
-      if (!settings.enabled || settings.scanMode !== 'strict') return;
+      if (!settings.enabled || settings.debugMode || settings.scanMode !== 'strict') return;
       if (skippedByPolicy(post)) return;
       if (await isHandled(key, now)) return;
 
@@ -180,7 +272,7 @@ async function boot() {
 
       // Two storage round trips ran since the dequeue check; re-read the mode
       // right before the destructive call (TLA+ model: CallOnlyInStrict).
-      if (!settings.enabled || settings.scanMode !== 'strict') return;
+      if (!settings.enabled || settings.debugMode || settings.scanMode !== 'strict') return;
 
       const r = await blockUser({
         screenName: post.handle,
@@ -213,13 +305,13 @@ async function boot() {
   /** Returns how many posts were actually scored, so the popup can report it. */
   async function scanVisible(force = false): Promise<number> {
     if (!settings.enabled) return 0;
-    if (!settings.autoScan && !force) return 0;
+    if (!settings.autoScan && !force && !settings.debugMode) return 0;
     const results = await Promise.all(listTweets().map((tweet) => handleArticle(tweet.el, force)));
     return results.filter(Boolean).length;
   }
 
   const mo = new MutationObserver(() => {
-    if (settings.autoScan) void scanVisible(false);
+    if (settings.autoScan || settings.debugMode) void scanVisible(false);
   });
   mo.observe(document.body, { childList: true, subtree: true });
 
@@ -243,13 +335,20 @@ async function boot() {
   watch();
   setInterval(watch, 2000);
 
-  if (settings.autoScan) void scanVisible(false);
+  if (settings.autoScan || settings.debugMode) void scanVisible(false);
 
   // Expose for manual debug
   (globalThis as unknown as { __antiSlopScan?: () => void }).__antiSlopScan = () => {
     for (const tweet of listTweets()) clearMounted(tweet.el);
     void scanVisible(true);
   };
+}
+
+/** Restore every article this script has touched (folded or badged). */
+function unmountAll(): void {
+  document
+    .querySelectorAll<HTMLElement>('[data-anti-slop]')
+    .forEach((el) => clearMounted(el));
 }
 
 function isInViewport(el: Element): boolean {

@@ -51,6 +51,23 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; }
   max-width: 170px;
 }
 
+.debug {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.debug:hover { border-color: var(--accent); }
+.debug input { margin: 2px 0 0; accent-color: var(--accent); }
+.debug-text { display: flex; flex-direction: column; gap: 1px; }
+.debug-title { font-weight: 600; }
+.debug-hint { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
 .actions { display: flex; gap: 8px; }
 button {
   flex: 1;

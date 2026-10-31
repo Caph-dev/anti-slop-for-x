@@ -1,5 +1,29 @@
 # Changelog
 
+## 未发布 / Unreleased
+
+新增调试模式：在 popup 里打开后，页面上每条已渲染且有正文的推文都显示自己的 AI 率，只读、不折叠、不屏蔽。
+Added a debug mode: turn it on in the popup and every rendered post with text on the page shows its own AI rate. Read-only — nothing is folded or blocked.
+
+- 新设置 `debugMode`（默认关闭），开关在工具栏 popup；content script 监听 `chrome.storage.onChanged`，翻转时先恢复所有已挂载的卡片（含之前被折叠的推文），再按新模式重扫。
+- New `debugMode` setting (off by default) with the toggle in the toolbar popup. The content script watches `chrome.storage.onChanged`, restores every mounted card (including posts folded earlier) and rescans under the new policy.
+- 调试评分绕过「短文本 / 自己的帖子 / 白名单」这类纯降噪跳过，否则它们只会显示 `0%`；`prefilterOnly`、阈值和模型配置照常生效。
+- Debug scoring bypasses the noise-only skips (short text / own posts / whitelist), which would otherwise just print `0%`; `prefilterOnly`, the threshold and the model settings still apply.
+- 调试分数写进独立的缓存命名空间 `debug:`，普通折叠路径读不到：白名单账号不会被一个调试分数折叠，调试也不会复用普通的跳过结果。
+- Debug scores live in their own cache namespace (`debug:`), invisible to the normal fold path: a whitelisted account can never be folded by a debug score, and debug never reuses a skipped normal result.
+- 每个徽标显示 `AI 42% · 模型/预筛/缓存/模型失败`，颜色与正常模式的分档一致（高于阈值 / 临界 / 无关），悬停给出 reason 与命中的预筛特征。
+- Each badge reads `AI 42% · model/prefilter/cached/model failed`, coloured with the normal policy bands (over threshold / borderline / irrelevant); hover shows the reason and the prefilter hits that fired.
+- 调试模式下不进入 `decide()`，自动屏蔽路径也不会执行；页面切换时用 generation 计数丢弃上一套设置算出的在途结果，避免刚打开调试就被旧扫描折叠。
+- Debug never reaches `decide()`, and the auto-block path cannot run. A generation counter discards scores that resolve after a settings change, so a scan started before debug was enabled cannot fold a post.
+- 扫描状态抽到 `extension/lib/scan-state.ts`：每次评分登记一张带唯一 id 的 ticket，同一 DOM 节点上的同一推文在结果返回前不会重复提交，过期任务也不会清掉新任务的登记；挂载前再核对节点仍在文档中且仍属原推文与当前设置，避免 X 复用节点时把 A 的分数挂到 B 上；被丢弃的在途结果不写入缓存（`scorePost` 的 `shouldCache`）。同一推文若同时出现在多个 DOM 节点，仍可能各发一次请求。
+- Scan bookkeeping moved to `extension/lib/scan-state.ts`: every score registers a ticket with a unique id, so the same post on the same DOM node is never submitted twice while in flight and a stale task cannot clear a newer registration. Before rendering, the node is re-checked to still be in the document and to still belong to the same post and settings, so X recycling a node cannot put post A's score on post B. Discarded in-flight results no longer write to the cache (`shouldCache` on `scorePost`). The same post appearing in two DOM nodes can still cost two requests.
+- `storage.onChanged` 只处理设置键，日志与 auto-guard 的写入不再作废正在进行的扫描。缓存失效与展示切换分开判断：同一次保存既改模型又翻转调试时，普通缓存和 `debug:` 缓存都会清；关闭总开关会作废在途结果并移除已注入的 UI。`maxConcurrency` 改为 `limiter.setMax()` 原地调整（`lib/concurrency.ts`），旧队列与新上限共用一个 limiter。模型、key、提示词、跳过规则等影响评分的设置变化会清空缓存并重新评分，只改阈值时仅重绘徽标分档。
+- `storage.onChanged` now reacts only to the settings key, so action-log and auto-guard writes no longer invalidate scans in progress. Cache invalidation and presentation changes are decided separately: one save that changes the model *and* flips debug clears both the normal and the `debug:` cache. Switching the extension off invalidates in-flight results and removes the injected UI. `maxConcurrency` is adjusted in place through `limiter.setMax()` (`lib/concurrency.ts`), so the old queue and the new cap share one limiter. Edits that change scoring (model, key, prompt, skip rules) clear the cache and re-score; a threshold-only edit just recolours the badges.
+- 调试模式覆盖 `autoScan`（只读诊断应由开关本身触发扫描），但总开关 `enabled` 仍然有效。无正文的推文（纯图片/视频）不显示评分，而不是伪造 `0%`。
+- Debug mode overrides `autoScan` (the toggle itself starts the read-only scan), while the global `enabled` switch still applies. Posts with no text (media-only) show no score instead of a fake `0%`.
+- 新增 `extension/lib/debug.ts`、`extension/lib/scan-state.ts` 及对应测试，外加 `tests/concurrency.test.ts`、`tests/score-invalidation.test.ts`；`scorePost` 增加可选的 `cacheKey` / `shouldCache`，`clearCache` 支持按前缀清理。测试覆盖：真实 `scorePost` 走模型路径时上游延迟返回、期间失效 → 不写缓存；重复触发只提交一次、失效后结果不渲染；并发上限上调与下调时队列的行为。content script 里的 DOM 挂载路径仍没有自动化测试。未在真实浏览器里跑过 UI，也未用真实 key 端到端验证。
+- Added `extension/lib/debug.ts`, `extension/lib/scan-state.ts` and their tests, plus `tests/concurrency.test.ts` and `tests/score-invalidation.test.ts`; `scorePost` gained optional `cacheKey` / `shouldCache`, and `clearCache` can drop a prefix. Tests cover the real `scorePost` model path with a delayed upstream that is invalidated mid-request (no cache write), one submission under repeated triggers, no render after invalidation, and queue behaviour when the concurrency cap is raised or lowered. The content script's DOM mounting path still has no automated test. The UI has not been run in a real browser, and no real-key end-to-end call was made.
+
 ## 0.7.1 — 2026-10-31
 
 - 安装说明改为下载 release 产物，不再要求 `npm install` 和 `npm run unpacked`；构建步骤移到「开发」节。

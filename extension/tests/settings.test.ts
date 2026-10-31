@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { loadSettings, saveSettings, settingsKey } from '../lib/settings';
+import {
+  loadSettings,
+  saveSettings,
+  scoringSettingsChanged,
+  settingsKey,
+} from '../lib/settings';
 import { DEFAULT_SETTINGS } from '../lib/types';
 import { ENDPOINT_PRESETS, resolveEndpoint } from '../lib/endpoints';
 import { resolveUpstreamPath } from '../lib/adapters';
@@ -106,6 +111,24 @@ describe('settings storage', () => {
     expect((await loadSettings()).scanMode).toBe('auto-fold');
   });
 
+  it('defaults debug mode off, including for settings saved before it existed', async () => {
+    installChrome({});
+    expect((await loadSettings()).debugMode).toBe(false);
+
+    installChrome({ antiSlopForXSettings: { threshold: 0.7 } });
+    const loaded = await loadSettings();
+    expect(loaded.debugMode).toBe(false);
+    expect(loaded.threshold).toBe(0.7);
+  });
+
+  it('persists the debug toggle', async () => {
+    const store = installChrome({});
+    const saved = await saveSettings({ debugMode: true });
+    expect(saved.debugMode).toBe(true);
+    expect((store.antiSlopForXSettings as { debugMode?: boolean }).debugMode).toBe(true);
+    expect((await loadSettings()).debugMode).toBe(true);
+  });
+
   it('defaults to the Jev preset when nothing is stored', async () => {
     installChrome({});
     const loaded = await loadSettings();
@@ -170,5 +193,52 @@ describe('settings storage', () => {
 
     expect(loaded.endpointPreset).toBe('openai-official');
     expect(resolveEndpoint(loaded).path).toBe('/decisions');
+  });
+});
+
+describe('scoringSettingsChanged', () => {
+  it('ignores display-only edits, including the debug toggle', () => {
+    const next = {
+      ...DEFAULT_SETTINGS,
+      enabled: false,
+      autoScan: false,
+      scanMode: 'manual' as const,
+      scanScope: 'timeline-and-replies' as const,
+      threshold: 0.8,
+      maxConcurrency: 8,
+      debugMode: true,
+    };
+    expect(scoringSettingsChanged(DEFAULT_SETTINGS, next)).toBe(false);
+  });
+
+  it('detects edits that change what scorePost computes', () => {
+    const edits = [
+      { apiKey: 'k' },
+      { model: 'other-model' },
+      { protocol: 'openai-decisions' as const },
+      { endpointPreset: 'custom' as const },
+      { upstreamBaseUrl: 'https://gateway.example.com/v1' },
+      { upstreamPath: '/decide' },
+      { defaultPrompt: 'another prompt' },
+      { prefilterOnly: true },
+      { skipShortText: false },
+      { shortTextMaxChars: 20 },
+      { skipOwnPosts: false },
+      { accountWhitelist: ['alice'] },
+    ];
+    for (const edit of edits) {
+      expect(scoringSettingsChanged(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS, ...edit })).toBe(
+        true,
+      );
+    }
+  });
+
+  it('compares the whitelist as a set of handles', () => {
+    const prev = { ...DEFAULT_SETTINGS, accountWhitelist: ['alice', 'bob'] };
+    const reordered = { ...DEFAULT_SETTINGS, accountWhitelist: ['@Bob', 'ALICE'] };
+    expect(scoringSettingsChanged(prev, reordered)).toBe(false);
+    expect(
+      scoringSettingsChanged(prev, { ...DEFAULT_SETTINGS, accountWhitelist: ['alice'] }),
+    ).toBe(true);
   });
 });

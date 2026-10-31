@@ -28,6 +28,11 @@ export interface Settings {
   shortTextMaxChars: number;
   skipOwnPosts: boolean;
   prefilterOnly: boolean; // skip model
+  /**
+   * Read-only diagnostic: score every post on the page and show its AI rate.
+   * Never folds, never blocks, and does not read the normal score cache.
+   */
+  debugMode: boolean;
   /** Built-in endpoint preset, or `custom` to use the fields below. */
   endpointPreset: EndpointPreset;
   /** User's own model endpoint (used when endpointPreset is `custom`). */
@@ -51,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   shortTextMaxChars: 12,
   skipOwnPosts: true,
   prefilterOnly: false,
+  debugMode: false,
   endpointPreset: 'jev-official',
   upstreamBaseUrl: 'https://api.typesafe.ai/v1',
   upstreamPath: '/systemone',

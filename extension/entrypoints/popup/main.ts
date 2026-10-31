@@ -1,4 +1,4 @@
-import { loadSettings } from '../../lib/settings';
+import { loadSettings, saveSettings } from '../../lib/settings';
 import { clearActionLog, readActionLog } from '../../lib/action-log';
 import { ENDPOINT_PRESETS, isPresetName, resolveEndpoint } from '../../lib/endpoints';
 import type { EndpointPreset, Settings } from '../../lib/types';
@@ -12,6 +12,9 @@ interface Strings {
   lblMode: string;
   lblScope: string;
   lblStatus: string;
+  lblDebug: string;
+  debugHint: string;
+  debug: string;
   scan: string;
   settings: string;
   scopeReplies: string;
@@ -50,6 +53,9 @@ const STR: Record<Lang, Strings> = {
     lblMode: 'Mode',
     lblScope: 'Scope',
     lblStatus: 'Status',
+    lblDebug: 'Debug mode',
+    debugHint: 'AI rate on every post · read-only, may call the model',
+    debug: 'Debug',
     scan: 'Scan current page',
     settings: 'Options',
     scopeReplies: 'Replies only',
@@ -88,6 +94,9 @@ const STR: Record<Lang, Strings> = {
     lblMode: '模式',
     lblScope: '范围',
     lblStatus: '状态',
+    lblDebug: '调试模式',
+    debugHint: '每条推文都显示 AI 率 · 只读，可能调用模型',
+    debug: '调试',
     scan: '扫描当前页',
     settings: '选项',
     scopeReplies: '仅回复',
@@ -153,6 +162,8 @@ function applyLabels(t: Strings) {
   $('lblMode').textContent = t.lblMode;
   $('lblScope').textContent = t.lblScope;
   $('lblStatus').textContent = t.lblStatus;
+  $('lblDebug').textContent = t.lblDebug;
+  $('debugHint').textContent = t.debugHint;
   $('scan').textContent = t.scan;
   $('settings').textContent = t.settings;
 }
@@ -165,11 +176,12 @@ function render(settings: Settings, t: Strings) {
   // Strict is shelved; loadSettings downgrades any stored value to auto fold.
   $('mode').textContent = settings.scanMode === 'manual' ? t.modeManual : t.modeFold;
   $('scope').textContent = settings.scanScope === 'replies-only' ? t.scopeReplies : t.scopeAll;
-  $('status').textContent = !settings.enabled
-    ? t.off
-    : settings.prefilterOnly
-      ? `${t.on} · ${t.prefilterOnly}`
-      : t.on;
+  const state = [
+    settings.prefilterOnly ? t.prefilterOnly : '',
+    settings.debugMode ? t.debug : '',
+  ].filter(Boolean);
+  $('status').textContent = !settings.enabled ? t.off : [t.on, ...state].join(' · ');
+  ($('debugMode') as HTMLInputElement).checked = settings.debugMode;
 }
 
 function isXUrl(url: string | undefined): boolean {
@@ -297,6 +309,13 @@ async function main() {
   }
 
   await renderLog(t);
+
+  $('debugMode').addEventListener('change', (ev) => {
+    const on = (ev.target as HTMLInputElement).checked;
+    // Persisted immediately: the content script listens on storage and swaps
+    // every mounted card between the normal policy and read-only scores.
+    void saveSettings({ debugMode: on }).then((s) => render(s, t));
+  });
 
   $('scan').addEventListener('click', () => void scan(t));
   $('settings').addEventListener('click', () => void chrome.runtime.openOptionsPage());

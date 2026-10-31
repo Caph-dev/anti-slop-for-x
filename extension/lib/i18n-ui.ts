@@ -14,6 +14,12 @@ const EN: Record<string, string> = {
   muteOk: 'Muted',
   blockOk: 'Blocked',
   actionFail: 'Action failed',
+  // Debug mode score sources
+  srcModel: 'model',
+  srcPrefilter: 'prefilter',
+  srcCache: 'cached',
+  srcSkipped: 'skipped',
+  srcError: 'model failed',
 };
 
 const ZH: Record<string, string> = {
@@ -30,6 +36,12 @@ const ZH: Record<string, string> = {
   muteOk: '已静音',
   blockOk: '已屏蔽',
   actionFail: '操作失败',
+  // Debug 模式的评分来源
+  srcModel: '模型',
+  srcPrefilter: '预筛',
+  srcCache: '缓存',
+  srcSkipped: '跳过',
+  srcError: '模型失败',
 };
 
 export function uiT(lang?: string): (key: string) => string {

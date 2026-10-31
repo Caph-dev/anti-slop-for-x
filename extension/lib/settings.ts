@@ -53,3 +53,37 @@ export async function saveSettings(partial: Partial<Settings>): Promise<Settings
 export function settingsKey(): string {
   return KEY;
 }
+
+function sameHandles(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const norm = (list: string[]) =>
+    list.map((h) => h.replace(/^@/, '').toLowerCase()).sort();
+  const left = norm(a);
+  const right = norm(b);
+  return left.every((handle, i) => handle === right[i]);
+}
+
+/**
+ * True when an edit changes what `scorePost` would compute or cache. The
+ * content script drops its cached scores only then; display-only edits
+ * (threshold, scan mode, auto-scan) keep them and just re-render.
+ *
+ * `debugMode` is deliberately not part of this comparison: flipping it is a
+ * separate axis with its own cache namespace, handled in the content script.
+ */
+export function scoringSettingsChanged(prev: Settings, next: Settings): boolean {
+  return (
+    prev.apiKey !== next.apiKey ||
+    prev.model !== next.model ||
+    prev.protocol !== next.protocol ||
+    prev.endpointPreset !== next.endpointPreset ||
+    prev.upstreamBaseUrl !== next.upstreamBaseUrl ||
+    prev.upstreamPath !== next.upstreamPath ||
+    prev.defaultPrompt !== next.defaultPrompt ||
+    prev.prefilterOnly !== next.prefilterOnly ||
+    prev.skipShortText !== next.skipShortText ||
+    prev.shortTextMaxChars !== next.shortTextMaxChars ||
+    prev.skipOwnPosts !== next.skipOwnPosts ||
+    !sameHandles(prev.accountWhitelist, next.accountWhitelist)
+  );
+}

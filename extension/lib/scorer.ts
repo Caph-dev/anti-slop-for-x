@@ -23,11 +23,31 @@ async function callModel(post: PostExtract, settings: Settings): Promise<unknown
   return decideUpstream(post, settings);
 }
 
+export interface ScoreOptions {
+  /**
+   * Cache slot to use instead of the post id. Debug mode passes its own
+   * namespace so its scores cannot be read back by the normal fold path.
+   */
+  cacheKey?: string;
+  /**
+   * Return false to skip the cache write: the score is about to be discarded
+   * because the settings changed while the request was in flight, and a stale
+   * number must not become the next scan's starting point.
+   */
+  shouldCache?: () => boolean;
+}
+
 export async function scorePost(
   post: PostExtract,
   settings: Settings,
+  options: ScoreOptions = {},
 ): Promise<DecisionResult> {
-  const cached = getCached(post.id);
+  const key = options.cacheKey ?? post.id;
+  const store = (result: DecisionResult): DecisionResult => {
+    if (options.shouldCache?.() !== false) setCached(key, result);
+    return result;
+  };
+  const cached = getCached(key);
   if (cached) return { ...cached, source: 'cache' };
 
   const handle = (post.handle || '').replace(/^@/, '').toLowerCase();
@@ -37,20 +57,17 @@ export async function scorePost(
       reason: 'whitelist',
       source: 'skipped',
     };
-    setCached(post.id, r);
-    return r;
+    return store(r);
   }
 
   if (settings.skipOwnPosts && post.isOwn) {
     const r: DecisionResult = { score: 0, reason: 'own-post', source: 'skipped' };
-    setCached(post.id, r);
-    return r;
+    return store(r);
   }
 
   if (settings.skipShortText && (post.text?.trim().length ?? 0) < settings.shortTextMaxChars) {
     const r: DecisionResult = { score: 0, reason: 'short-text', source: 'skipped' };
-    setCached(post.id, r);
-    return r;
+    return store(r);
   }
 
   const pre = runPrefilter(post);
@@ -63,8 +80,7 @@ export async function scorePost(
       evidence: 'prefilter',
       prefilter: pre,
     };
-    setCached(post.id, r);
-    return r;
+    return store(r);
   }
 
   // Borderline → model
@@ -81,8 +97,7 @@ export async function scorePost(
       prefilter: pre,
       raw,
     };
-    setCached(post.id, r);
-    return r;
+    return store(r);
   } catch (err) {
     // Fall back to prefilter on model failure
     const r: DecisionResult = {
@@ -92,7 +107,6 @@ export async function scorePost(
       evidence: 'prefilter',
       prefilter: pre,
     };
-    setCached(post.id, r);
-    return r;
+    return store(r);
   }
 }

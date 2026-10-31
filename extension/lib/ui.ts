@@ -1,8 +1,11 @@
 /** Fold / badge / Mute-Block UI injected into X tweets */
 
 import type { DecisionResult } from './types';
+import { debugScoreLabel } from './debug';
 
 const ROOT_ATTR = 'data-anti-slop';
+/** Post id the card was rendered for; X reuses article nodes across posts. */
+const POST_ATTR = 'data-anti-slop-post';
 const FOLDED_CLASS = 'anti-slop-folded';
 const STYLE_ID = 'anti-slop-styles';
 
@@ -34,6 +37,16 @@ export function ensureStyles(): void {
 .anti-slop-badge.ss-warn { background: rgba(255, 173, 31, 0.18); color: #cc8b00; }
 .anti-slop-pill { cursor: pointer; }
 .anti-slop-pill:hover { filter: brightness(1.15); }
+.anti-slop-debug {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+  background: rgba(127,127,127,0.16); color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.anti-slop-debug.ss-high { background: rgba(244, 33, 46, 0.16); color: #f4212e; }
+.anti-slop-debug.ss-mid { background: rgba(255, 173, 31, 0.2); color: #cc8b00; }
+.anti-slop-debug.ss-low { background: rgba(29, 155, 240, 0.14); color: #1d9bf0; }
 `;
   document.documentElement.appendChild(style);
 }
@@ -143,12 +156,16 @@ export function mountResult(
   presentation: Presentation,
   handlers: UiHandlers,
   t: (key: string) => string,
+  postId?: string,
 ): void {
   ensureStyles();
   article.setAttribute(ROOT_ATTR, '1');
+  if (postId) article.setAttribute(POST_ATTR, postId);
   restoreArticle(article);
   // Drop anything left by an earlier mount (e.g. after an extension reload).
-  article.querySelectorAll('.anti-slop-bar, .anti-slop-badge').forEach((n) => n.remove());
+  article
+    .querySelectorAll('.anti-slop-bar, .anti-slop-badge, .anti-slop-debug')
+    .forEach((n) => n.remove());
   article.classList.remove(FOLDED_CLASS);
 
   const pct = Math.round(result.score * 100);
@@ -224,13 +241,50 @@ function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/\n/g, ' ');
 }
 
-export function alreadyMounted(article: HTMLElement): boolean {
-  return article.hasAttribute(ROOT_ATTR);
+/**
+ * Debug mode: a read-only score on every post, whatever the normal mode would
+ * have done with it. Never folds, so the page stays fully readable.
+ */
+export function mountDebugBadge(
+  article: HTMLElement,
+  result: DecisionResult,
+  threshold: number,
+  t: (key: string) => string,
+  postId?: string,
+): void {
+  ensureStyles();
+  restoreArticle(article);
+  article.setAttribute(ROOT_ATTR, '1');
+  if (postId) article.setAttribute(POST_ATTR, postId);
+  article.querySelectorAll('.anti-slop-bar, .anti-slop-badge, .anti-slop-debug').forEach((n) =>
+    n.remove(),
+  );
+  article.classList.remove(FOLDED_CLASS);
+
+  const label = debugScoreLabel(result, threshold);
+  const badge = document.createElement('span');
+  badge.className = `anti-slop-debug ss-${label.level}`;
+  badge.textContent = `AI ${label.pct}% · ${t(label.sourceKey)}`;
+  badge.title = label.detail;
+  badge.dataset.source = label.sourceKey;
+
+  const nameRow = article.querySelector('[data-testid="User-Name"]');
+  (nameRow || article).appendChild(badge);
+}
+
+/** `postId` makes a recycled article re-render for its new post. */
+export function alreadyMounted(article: HTMLElement, postId?: string): boolean {
+  if (!article.hasAttribute(ROOT_ATTR)) return false;
+  if (postId == null) return true;
+  return article.getAttribute(POST_ATTR) === postId;
 }
 
 export function clearMounted(article: HTMLElement): void {
   article.removeAttribute(ROOT_ATTR);
+  article.removeAttribute(POST_ATTR);
   article.classList.remove(FOLDED_CLASS);
   restoreArticle(article);
-  article.querySelectorAll('.anti-slop-bar, .anti-slop-badge').forEach((n) => n.remove());
+  article
+    .querySelectorAll('.anti-slop-bar, .anti-slop-badge, .anti-slop-debug')
+    .forEach((n) => n.remove());
 }
