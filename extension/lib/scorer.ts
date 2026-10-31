@@ -60,6 +60,7 @@ export async function scorePost(
       score: pre.score,
       reason: pre.hits.map((h) => h.id).join(',') || (pre.skipModel ? 'human-like' : 'prefilter'),
       source: 'prefilter',
+      evidence: 'prefilter',
       prefilter: pre,
     };
     setCached(post.id, r);
@@ -76,6 +77,7 @@ export async function scorePost(
       score: blended,
       reason: `model:${reason}; pre=${pre.score.toFixed(2)}`,
       source: 'model',
+      evidence: 'model',
       prefilter: pre,
       raw,
     };
@@ -87,6 +89,7 @@ export async function scorePost(
       score: pre.score,
       reason: `model-error→prefilter:${pre.hits.map((h) => h.id).join(',') || 'none'}`,
       source: 'prefilter',
+      evidence: 'prefilter',
       prefilter: pre,
     };
     setCached(post.id, r);

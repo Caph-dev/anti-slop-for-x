@@ -1,12 +1,15 @@
 /**
- * Mute / Block — ONLY on explicit user click.
+ * Mute / Block.
  *
- * Strategy (in order):
- * 1) Prefer clicking X's native ··· → Mute/Block menu (same UX as manual).
- * 2) Fallback: same-origin X web API using logged-in cookies (ct0 + bearer from page).
+ * Two callers, two strategies:
+ * - manual click: try X's native ··· → Mute/Block menu first (same UX as doing
+ *   it yourself), then fall back to the web API.
+ * - automatic (strict mode / auto mute): go straight to the web API. Driving
+ *   the caret menu from the background opens popups, steals focus and races
+ *   with whatever the user is doing, so `preferApi` skips it entirely.
  *
- * Headless / automation note: native menu clicks need a real interactive page;
- * cookie API fallback still requires an authenticated x.com session in this browser.
+ * The API path needs an authenticated x.com session (ct0 + bearer) in this
+ * browser; it does not work in a headless context without cookies.
  */
 
 function getCookie(name: string): string | null {
@@ -89,32 +92,49 @@ export async function clickNativeMenuAction(
   return true;
 }
 
-export async function muteUser(opts: {
-  article: HTMLElement;
+export interface UserActionResult {
+  ok: boolean;
+  method: string;
+  status: number;
+  detail?: string;
+}
+
+export interface UserActionOpts {
   screenName: string;
   userId?: string | null;
-}): Promise<{ ok: boolean; method: string; detail?: string }> {
-  if (await clickNativeMenuAction(opts.article, 'Mute')) {
-    return { ok: true, method: 'native-menu' };
+  /** Needed only for the native-menu path. */
+  article?: HTMLElement;
+  /** Skip the native menu and use the cookie API directly (automatic actions). */
+  preferApi?: boolean;
+}
+
+export async function muteUser(opts: UserActionOpts): Promise<UserActionResult> {
+  if (!opts.preferApi && opts.article && (await clickNativeMenuAction(opts.article, 'Mute'))) {
+    return { ok: true, method: 'native-menu', status: 200 };
   }
   const params = new URLSearchParams();
   if (opts.userId) params.set('user_id', opts.userId);
   else params.set('screen_name', opts.screenName);
   const res = await xApiPost('/1.1/mutes/users/create.json', params);
-  return { ok: res.ok, method: 'api-1.1', detail: res.detail || `HTTP ${res.status}` };
+  return { ok: res.ok, method: 'api-1.1', status: res.status, detail: res.detail || `HTTP ${res.status}` };
 }
 
-export async function blockUser(opts: {
-  article: HTMLElement;
-  screenName: string;
-  userId?: string | null;
-}): Promise<{ ok: boolean; method: string; detail?: string }> {
-  if (await clickNativeMenuAction(opts.article, 'Block')) {
-    return { ok: true, method: 'native-menu' };
+export async function blockUser(opts: UserActionOpts): Promise<UserActionResult> {
+  if (!opts.preferApi && opts.article && (await clickNativeMenuAction(opts.article, 'Block'))) {
+    return { ok: true, method: 'native-menu', status: 200 };
   }
   const params = new URLSearchParams();
   if (opts.userId) params.set('user_id', opts.userId);
   else params.set('screen_name', opts.screenName);
   const res = await xApiPost('/1.1/blocks/create.json', params);
-  return { ok: res.ok, method: 'api-1.1', detail: res.detail || `HTTP ${res.status}` };
+  return { ok: res.ok, method: 'api-1.1', status: res.status, detail: res.detail || `HTTP ${res.status}` };
+}
+
+/** Undo an automatic block (used by the popup's undo button). */
+export async function unblockUser(opts: UserActionOpts): Promise<UserActionResult> {
+  const params = new URLSearchParams();
+  if (opts.userId) params.set('user_id', opts.userId);
+  else params.set('screen_name', opts.screenName);
+  const res = await xApiPost('/1.1/blocks/destroy.json', params);
+  return { ok: res.ok, method: 'api-1.1', status: res.status, detail: res.detail || `HTTP ${res.status}` };
 }

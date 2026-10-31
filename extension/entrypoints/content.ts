@@ -9,8 +9,17 @@ import {
   parentCreatedAtMs,
   parentTextFor,
 } from '../lib/x/dom';
-import { blockUser, muteUser } from '../lib/x/mute-block';
+import { blockUser, muteUser, unblockUser } from '../lib/x/mute-block';
 import { alreadyMounted, clearMounted, mountResult } from '../lib/ui';
+import { decide } from '../lib/mode';
+import { logAutoAction, type AutoActionEntry } from '../lib/action-log';
+import {
+  MELTDOWN_MS,
+  isHandled,
+  markHandled,
+  pauseAutoActions,
+  reserveAutoAction,
+} from '../lib/auto-guard';
 import { uiT } from '../lib/i18n-ui';
 import type { PostExtract, Settings } from '../lib/types';
 
@@ -37,6 +46,12 @@ async function boot() {
   });
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'ANTI_SLOP_UNBLOCK') {
+      void unblockUser({ screenName: String(msg.handle), preferApi: true })
+        .then((r) => sendResponse(r))
+        .catch((e: unknown) => sendResponse({ ok: false, status: 0, method: 'error', detail: String(e) }));
+      return true;
+    }
     if (msg?.type === 'ANTI_SLOP_SCAN_NOW') {
       void scanVisible(true)
         .then((scanned) => sendResponse({ ok: true, scanned }))
@@ -79,7 +94,10 @@ async function boot() {
     processed.add(el);
 
     const result = await limiter.run(() => scorePost(post, settings));
-    mountResult(el, result, settings.threshold, {
+    const decision = decide(result, settings);
+    if (decision.presentation === 'none') return false;
+
+    mountResult(el, result, decision.presentation, {
       onExpand: () => {},
       onMute: () => {
         void muteUser({ article: el, screenName: post.handle, userId: post.userId }).then((r) => {
@@ -92,7 +110,100 @@ async function boot() {
         });
       },
     }, t);
+
+    if (decision.autoBlock) scheduleAutoBlock(post, result.score);
     return true;
+  }
+
+  /**
+   * Serialised auto block for strict mode.
+   *
+   * The queue can outlive the settings that filled it, so every item is
+   * re-validated at dequeue time. Limits (interval, daily cap, meltdown) live
+   * in auto-guard and span tabs and reloads; the durable ledger keys on userId
+   * when we know it. Native-menu automation is never used here: it opens
+   * popups and races with the user.
+   */
+  let autoQueue: Promise<void> = Promise.resolve();
+  const autoSeen = new Set<string>();
+
+  function skippedByPolicy(post: PostExtract): boolean {
+    const handle = (post.handle || '').replace(/^@/, '').toLowerCase();
+    if (
+      settings.accountWhitelist.some(
+        (h) => h.replace(/^@/, '').toLowerCase() === handle,
+      )
+    ) {
+      return true;
+    }
+    return settings.skipOwnPosts && Boolean(post.isOwn);
+  }
+
+  function logAction(entry: AutoActionEntry): void {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      // The service worker writes serially; direct writes can race across tabs.
+      chrome.runtime.sendMessage({ type: 'ANTI_SLOP_LOG_ACTION', entry }).catch(() => {
+        void logAutoAction(entry);
+      });
+      return;
+    }
+    void logAutoAction(entry);
+  }
+
+  function scheduleAutoBlock(post: PostExtract, score: number): void {
+    const key = (post.userId || post.handle || '').toLowerCase();
+    if (!key || autoSeen.has(key)) return;
+    autoSeen.add(key);
+
+    autoQueue = autoQueue.then(async () => {
+      const now = Date.now();
+      // Re-check the world: the user may have changed mode or disabled us.
+      if (!settings.enabled || settings.scanMode !== 'strict') return;
+      if (skippedByPolicy(post)) return;
+      if (await isHandled(key, now)) return;
+
+      const reserved = await reserveAutoAction(now);
+      if (!reserved.ok) {
+        if (reserved.verdict.reason !== 'paused') {
+          void logAutoAction({
+            ts: now,
+            action: 'block',
+            handle: post.handle,
+            postId: post.id,
+            score,
+            ok: false,
+            detail: `skipped:${reserved.verdict.reason}`,
+          });
+        }
+        return;
+      }
+
+      const r = await blockUser({
+        screenName: post.handle,
+        userId: post.userId,
+        preferApi: true,
+      });
+
+      if (r.ok) await markHandled(key, now);
+      else if (r.status === 403 || r.status === 429) {
+        // X is pushing back: stop automatic actions instead of retrying into it.
+        await pauseAutoActions(now + MELTDOWN_MS);
+        toast(t('autoPaused'));
+      }
+
+      logAction({
+        ts: now,
+        action: 'block',
+        handle: post.handle,
+        postId: post.id,
+        score,
+        ok: r.ok,
+        detail: r.ok ? undefined : r.detail || r.method,
+      });
+      toast(
+        r.ok ? `${t('autoBlocked')} @${post.handle}` : `${t('actionFail')}: ${r.detail || r.method}`,
+      );
+    });
   }
 
   /** Returns how many posts were actually scored, so the popup can report it. */

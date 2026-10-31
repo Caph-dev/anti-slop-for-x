@@ -74,3 +74,29 @@ button.primary:disabled { opacity: 0.55; }
 
 .note { margin: 10px 0 0; color: var(--muted); font-size: 12px; min-height: 2.6em; }
 .note.warn { color: #cc8b00; }
+
+.log { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.log-head {
+  display: flex; justify-content: space-between; align-items: center;
+  color: var(--muted); font-size: 12px; margin-bottom: 6px;
+}
+.log ul { list-style: none; margin: 0; padding: 0; }
+.log li {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 3px 0; font-size: 12px;
+}
+.log li .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log li .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+.log li.fail .who { color: #cc8b00; }
+button.link {
+  background: none; border: none; padding: 0; color: var(--muted);
+  font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline;
+}
+
+.log li .act {
+  border: 1px solid var(--border); border-radius: 999px;
+  background: transparent; color: var(--muted);
+  font-size: 11px; padding: 1px 8px; cursor: pointer;
+}
+.log li .act:hover { border-color: #f4212e; color: #f4212e; }
+.log li .done { color: var(--muted); font-size: 11px; }

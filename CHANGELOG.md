@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 — 2026-10-31
+
+三档运行模式（手动 / 自动折叠 / 严厉）+ 自动动作的安全加固与一键撤销。
+Three scan modes (manual / auto fold / strict) plus safety rails and one-click undo for automatic actions.
+
+- 新增 `scanMode` 设置：`manual`（只显示疑似 AI 率）、`auto-fold`（默认，折叠）、`strict`（折叠 + 超 0.9 自动屏蔽作者）；决策逻辑抽到 `extension/lib/mode.ts` 并带测试。
+- New `scanMode` setting (manual / auto-fold / strict), with the decision logic in `extension/lib/mode.ts`.
+- 自动屏蔽要求**模型证据**：`DecisionResult.evidence` 记录分数来源，缓存改写 `source` 后仍保留；仅预筛、`prefilterOnly`、模型报错回退的分数一律不触发屏蔽。
+- Auto-block now requires model evidence (`DecisionResult.evidence`), so prefilter-only and model-error fallbacks can fold but never block.
+- 新增 `extension/lib/auto-guard.ts`：20 秒最小间隔、每日 30 次上限、403/429 熔断 1 小时、按 `userId`（无则 handle）的 7 天持久去重，状态存 `chrome.storage.local`。
+- New `extension/lib/auto-guard.ts`: 20s minimum interval, 30/day cap, 1h meltdown on 403/429, and a 7-day ledger keyed by userId (handle when unknown).
+- 自动动作出队前重新校验启用状态、模式、白名单与自己的帖子；成功后才写入去重账本。
+- Queued auto actions re-validate enabled/mode/whitelist before running, and only mark an account handled after a successful call.
+- 自动动作日志改由 background service worker 单点写入，避免多标签 read-modify-write 丢条目；记录 userId 与失败原因。
+- The action log is now written by the background worker so parallel tabs cannot drop entries.
+- 手动静音/屏蔽仍走原生 `···` 菜单；自动动作只走 cookie API，不再弹出菜单。
+- Manual clicks still use X's native menu; automatic actions only use the cookie API.
+- 新增**一键撤销**：popup 日志里自动屏蔽的条目可撤销，经任意 x.com 标签页调用 `blocks/destroy.json` 解除屏蔽，并把该账号加入白名单，避免 Strict 再次屏蔽；日志条目标记为已撤销。
+- Added one-click undo for automatic blocks: the popup calls `blocks/destroy.json` from an open x.com tab, whitelists the account so strict mode does not re-block it, and marks the log entry as undone.
+
 ## 0.5.0 — 2026-10-31
 
 折叠卡片的三处体验调整：可再次折叠、静音/屏蔽加上语义说明、卡片不再显示内部字段。

@@ -45,16 +45,21 @@ export interface UiHandlers {
 }
 
 /**
- * State per folded tweet. A tweet article on X is `display:flex;
- * flex-direction:row` (avatar column + content column), so while folded the
- * card sits in the article with its siblings hidden; while expanded the card is
- * removed and replaced by a small pill in the name row, because leaving a block
- * inside that flex row would squeeze the tweet body again.
+ * State per rendered decision.
+ *
+ * A tweet article on X is `display:flex; flex-direction:row` (avatar column +
+ * content column), so our card must never behave like a normal flex item:
+ * - folded:   the card is the article's only visible child (block layout)
+ * - advisory: the card takes a full width line of its own via flex-wrap, and
+ *             the tweet stays readable underneath
  */
-interface FoldState {
+interface DecisionState {
   bar: HTMLDivElement;
   pill: HTMLSpanElement | null;
+  toggle: HTMLButtonElement | null;
+  mode: 'fold' | 'advisory';
   originalDisplay: string;
+  originalFlexWrap: string;
   hidden: Array<{ el: HTMLElement; display: string }>;
   collapsed: boolean;
   pct: number;
@@ -62,15 +67,15 @@ interface FoldState {
   t: (key: string) => string;
 }
 
-const folds = new WeakMap<HTMLElement, FoldState>();
+const states = new WeakMap<HTMLElement, DecisionState>();
 
-function collapse(article: HTMLElement, state: FoldState): void {
+function collapse(article: HTMLElement, state: DecisionState): void {
   if (state.collapsed) return;
   state.pill?.remove();
   state.pill = null;
 
   article.prepend(state.bar);
-  const hidden: FoldState['hidden'] = [];
+  const hidden: DecisionState['hidden'] = [];
   for (const child of Array.from(article.children)) {
     if (child === state.bar) continue;
     const el = child as HTMLElement;
@@ -79,19 +84,29 @@ function collapse(article: HTMLElement, state: FoldState): void {
   }
   state.hidden = hidden;
   article.style.display = 'block';
+  article.style.flexWrap = '';
   article.classList.add(FOLDED_CLASS);
   state.collapsed = true;
+  if (state.toggle) state.toggle.textContent = state.t('expand');
 }
 
-function expand(article: HTMLElement, state: FoldState): void {
+function expand(article: HTMLElement, state: DecisionState): void {
   if (!state.collapsed) return;
   for (const { el, display } of state.hidden) el.style.display = display;
   state.hidden = [];
   article.style.display = state.originalDisplay;
+  article.style.flexWrap = state.originalFlexWrap;
   article.classList.remove(FOLDED_CLASS);
   state.collapsed = false;
 
-  // Keep the score reachable without leaving a block in the flex row.
+  if (state.mode === 'advisory') {
+    // The card is the point of manual mode: keep it, just relabel the toggle.
+    if (state.toggle) state.toggle.textContent = state.t('collapse');
+    return;
+  }
+
+  // Folding card for auto modes: a block inside the flex row would squeeze the
+  // body, so replace it with a pill and let a click fold the reply again.
   state.bar.remove();
   const pill = document.createElement('span');
   pill.className = 'anti-slop-badge anti-slop-pill';
@@ -108,21 +123,24 @@ function expand(article: HTMLElement, state: FoldState): void {
 }
 
 function restoreArticle(article: HTMLElement): void {
-  const state = folds.get(article);
+  const state = states.get(article);
   if (!state) return;
   for (const { el, display } of state.hidden) el.style.display = display;
   state.hidden = [];
   article.style.display = state.originalDisplay;
+  article.style.flexWrap = state.originalFlexWrap;
   article.classList.remove(FOLDED_CLASS);
   state.pill?.remove();
   state.bar.remove();
-  folds.delete(article);
+  states.delete(article);
 }
+
+export type Presentation = 'fold' | 'advisory' | 'badge';
 
 export function mountResult(
   article: HTMLElement,
   result: DecisionResult,
-  threshold: number,
+  presentation: Presentation,
   handlers: UiHandlers,
   t: (key: string) => string,
 ): void {
@@ -134,56 +152,67 @@ export function mountResult(
   article.classList.remove(FOLDED_CLASS);
 
   const pct = Math.round(result.score * 100);
-  const fold = result.score >= threshold && result.source !== 'skipped';
 
-  if (fold) {
-    const bar = document.createElement('div');
-    bar.className = 'anti-slop-bar';
-    bar.style.width = '100%';
-    bar.style.boxSizing = 'border-box';
-    // The raw score breakdown stays one hover away instead of sitting in the UI.
-    bar.title = result.reason;
-    bar.innerHTML = `
-      <span class="ss-score">${t('foldedLabel')} ${pct}%</span>
-      <button type="button" data-act="expand">${t('expand')}</button>
-      <button type="button" data-act="mute" title="${escapeAttr(t('muteHint'))}">${t('mute')}</button>
-      <button type="button" class="ss-danger" data-act="block" title="${escapeAttr(t('blockHint'))}">${t('block')}</button>
-    `;
-
-    const state: FoldState = {
-      bar,
-      pill: null,
-      originalDisplay: article.style.display,
-      hidden: [],
-      collapsed: false,
-      pct,
-      reason: result.reason,
-      t,
-    };
-    folds.set(article, state);
-
-    bar.addEventListener('click', (ev) => {
-      const btn = (ev.target as HTMLElement).closest('button[data-act]') as HTMLButtonElement | null;
-      if (!btn) return;
-      const act = btn.getAttribute('data-act');
-      if (act === 'expand') {
-        expand(article, state);
-        handlers.onExpand();
-      } else if (act === 'mute') handlers.onMute();
-      else if (act === 'block') handlers.onBlock();
-    });
-
-    collapse(article, state);
-  } else if (result.score >= threshold * 0.7 && result.source !== 'skipped') {
-    // Passive indicator: mute/block stay available from the fold card and X's
-    // own menu, so no extra action bar is injected next to the badge.
+  if (presentation === 'badge') {
     const badge = document.createElement('span');
     badge.className = 'anti-slop-badge ss-warn';
     badge.textContent = `AI? ${pct}%`;
     badge.title = result.reason;
     const nameRow = article.querySelector('[data-testid="User-Name"]');
     (nameRow || article).appendChild(badge);
+    return;
   }
+
+  const bar = document.createElement('div');
+  bar.className = 'anti-slop-bar';
+  bar.style.width = '100%';
+  bar.style.boxSizing = 'border-box';
+  // The raw score breakdown stays one hover away instead of sitting in the UI.
+  bar.title = result.reason;
+  bar.innerHTML = `
+    <span class="ss-score">${t('foldedLabel')} ${pct}%</span>
+    <button type="button" data-act="toggle">${presentation === 'fold' ? t('expand') : t('collapse')}</button>
+    <button type="button" data-act="mute" title="${escapeAttr(t('muteHint'))}">${t('mute')}</button>
+    <button type="button" class="ss-danger" data-act="block" title="${escapeAttr(t('blockHint'))}">${t('block')}</button>
+  `;
+  const toggle = bar.querySelector('button[data-act="toggle"]') as HTMLButtonElement;
+
+  const state: DecisionState = {
+    bar,
+    pill: null,
+    toggle,
+    mode: presentation === 'fold' ? 'fold' : 'advisory',
+    originalDisplay: article.style.display,
+    originalFlexWrap: article.style.flexWrap,
+    hidden: [],
+    collapsed: false,
+    pct,
+    reason: result.reason,
+    t,
+  };
+  states.set(article, state);
+
+  bar.addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest('button[data-act]') as HTMLButtonElement | null;
+    if (!btn) return;
+    const act = btn.getAttribute('data-act');
+    if (act === 'toggle') {
+      if (state.collapsed) expand(article, state);
+      else collapse(article, state);
+      handlers.onExpand();
+    } else if (act === 'mute') handlers.onMute();
+    else if (act === 'block') handlers.onBlock();
+  });
+
+  if (presentation === 'fold') {
+    collapse(article, state);
+    return;
+  }
+
+  // Advisory: let the card take a full line of its own, tweet body untouched.
+  article.style.flexWrap = 'wrap';
+  bar.style.flex = '0 0 100%';
+  article.prepend(bar);
 }
 
 function escapeHtml(s: string): string {

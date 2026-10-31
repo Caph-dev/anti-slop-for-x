@@ -1,4 +1,5 @@
 import { loadSettings } from '../../lib/settings';
+import { clearActionLog, readActionLog } from '../../lib/action-log';
 import { ENDPOINT_PRESETS, isPresetName, resolveEndpoint } from '../../lib/endpoints';
 import type { EndpointPreset, Settings } from '../../lib/types';
 
@@ -8,6 +9,7 @@ interface Strings {
   subtitle: string;
   lblEndpoint: string;
   lblModel: string;
+  lblMode: string;
   lblScope: string;
   lblStatus: string;
   scan: string;
@@ -20,6 +22,19 @@ interface Strings {
   presetJev: string;
   presetOpenAI: string;
   presetCustom: string;
+  modeManual: string;
+  modeFold: string;
+  modeStrict: string;
+  logTitle: string;
+  logClear: string;
+  logEmpty: string;
+  undo: string;
+  undone: string;
+  undoOk: string;
+  undoFail: string;
+  undoNoTab: string;
+  mute: string;
+  block: string;
   notXTab: string;
   noContentScript: string;
   scanning: string;
@@ -33,6 +48,7 @@ const STR: Record<Lang, Strings> = {
     subtitle: 'Fold AI-slop / bot replies on X',
     lblEndpoint: 'Endpoint',
     lblModel: 'Model',
+    lblMode: 'Mode',
     lblScope: 'Scope',
     lblStatus: 'Status',
     scan: 'Scan current page',
@@ -45,6 +61,19 @@ const STR: Record<Lang, Strings> = {
     presetJev: 'TypeSafe / Jev',
     presetOpenAI: 'OpenAI Decisions',
     presetCustom: 'Custom',
+    modeManual: 'Manual',
+    modeFold: 'Auto fold',
+    modeStrict: 'Strict',
+    logTitle: 'Recent automatic actions',
+    logClear: 'Clear',
+    logEmpty: 'None yet',
+    undo: 'Undo',
+    undone: 'undone',
+    undoOk: 'Unblocked and whitelisted',
+    undoFail: 'Undo failed',
+    undoNoTab: 'Open an x.com tab to undo',
+    mute: 'Mute',
+    block: 'Block',
     notXTab: 'This tab is not x.com — open a profile or a post first.',
     noContentScript:
       'No content script in this tab. Reload the tab once after installing or reloading the extension.',
@@ -58,6 +87,7 @@ const STR: Record<Lang, Strings> = {
     subtitle: '折叠 X 上的 AI 注水 / 机器人回复',
     lblEndpoint: '端点',
     lblModel: '模型',
+    lblMode: '模式',
     lblScope: '范围',
     lblStatus: '状态',
     scan: '扫描当前页',
@@ -70,6 +100,19 @@ const STR: Record<Lang, Strings> = {
     presetJev: 'TypeSafe / Jev',
     presetOpenAI: 'OpenAI Decisions',
     presetCustom: '自定义',
+    modeManual: '手动',
+    modeFold: '自动折叠',
+    modeStrict: '严厉',
+    logTitle: '最近的自动动作',
+    logClear: '清空',
+    logEmpty: '暂无',
+    undo: '撤销',
+    undone: '已撤销',
+    undoOk: '已解除屏蔽并加入白名单',
+    undoFail: '撤销失败',
+    undoNoTab: '需要打开一个 x.com 标签页才能撤销',
+    mute: '静音',
+    block: '屏蔽',
     notXTab: '当前标签不是 x.com —— 先打开一个用户页或推文页。',
     noContentScript: '这个标签里没有 content script。安装或重载扩展后，请刷新一次该标签页。',
     scanning: '扫描中…',
@@ -110,6 +153,7 @@ function applyLabels(t: Strings) {
   $('subtitle').textContent = t.subtitle;
   $('lblEndpoint').textContent = t.lblEndpoint;
   $('lblModel').textContent = t.lblModel;
+  $('lblMode').textContent = t.lblMode;
   $('lblScope').textContent = t.lblScope;
   $('lblStatus').textContent = t.lblStatus;
   $('scan').textContent = t.scan;
@@ -121,6 +165,12 @@ function render(settings: Settings, t: Strings) {
   $('endpoint').textContent = endpointLabel(settings, t);
   $('endpoint').title = `${endpoint.baseUrl}${endpoint.path}`;
   $('model').textContent = endpoint.model || '—';
+  $('mode').textContent =
+    settings.scanMode === 'manual'
+      ? t.modeManual
+      : settings.scanMode === 'strict'
+        ? t.modeStrict
+        : t.modeFold;
   $('scope').textContent = settings.scanScope === 'replies-only' ? t.scopeReplies : t.scopeAll;
   $('status').textContent = !settings.enabled
     ? t.off
@@ -171,6 +221,75 @@ async function scan(t: Strings) {
   }
 }
 
+function two(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+async function undoBlock(ts: number, handle: string, t: Strings): Promise<void> {
+  const note = $('undoNote');
+  note.classList.remove('warn');
+  note.textContent = '…';
+  try {
+    const res = (await chrome.runtime.sendMessage({
+      type: 'ANTI_SLOP_UNDO_BLOCK',
+      ts,
+      handle,
+    })) as { ok?: boolean; error?: string } | undefined;
+    if (res?.ok) {
+      note.textContent = t.undoOk;
+      await renderLog(t);
+      return;
+    }
+    note.classList.add('warn');
+    note.textContent = res?.error === 'no-x-tab' ? t.undoNoTab : t.undoFail;
+  } catch {
+    note.classList.add('warn');
+    note.textContent = t.undoFail;
+  }
+}
+
+async function renderLog(t: Strings): Promise<void> {
+  const entries = await readActionLog();
+  const log = $('log');
+  const list = $('logList');
+  $('lblLog').textContent = t.logTitle;
+  $('clearLog').textContent = t.logClear;
+
+  if (entries.length === 0) {
+    log.hidden = false;
+    list.innerHTML = `<li><span class="who">${t.logEmpty}</span></li>`;
+    return;
+  }
+
+  log.hidden = false;
+  list.innerHTML = entries
+    .slice(0, 8)
+    .map((e) => {
+      const when = new Date(e.ts);
+      const time = `${two(when.getHours())}:${two(when.getMinutes())}`;
+      const pct = Math.round(e.score * 100);
+      const label = e.action === 'block' ? t.block : t.mute;
+      const canUndo = e.action === 'block' && e.ok;
+      const tail = !canUndo
+        ? ''
+        : e.undone
+          ? `<span class="done">${t.undone}</span>`
+          : `<button class="act" data-ts="${e.ts}" data-handle="${escapeHtml(e.handle)}">${t.undo}</button>`;
+      return `<li class="${e.ok ? '' : 'fail'}"><span class="who">${label} @${escapeHtml(
+        e.handle,
+      )} · ${pct}%</span><span class="when">${time}</span>${tail}</li>`;
+    })
+    .join('');
+
+  list.querySelectorAll<HTMLButtonElement>('button.act').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const ts = Number(btn.dataset.ts);
+      const handle = btn.dataset.handle || '';
+      void undoBlock(ts, handle, t);
+    });
+  });
+}
+
 async function main() {
   const t = STR[lang()];
   applyLabels(t);
@@ -184,8 +303,19 @@ async function main() {
     }`;
   }
 
+  await renderLog(t);
+
   $('scan').addEventListener('click', () => void scan(t));
   $('settings').addEventListener('click', () => void chrome.runtime.openOptionsPage());
+  $('clearLog').addEventListener('click', () => {
+    void clearActionLog().then(() => renderLog(t));
+  });
 }
 
 void main();
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  );
+}

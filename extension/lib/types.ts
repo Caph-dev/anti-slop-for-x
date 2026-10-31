@@ -10,10 +10,19 @@ export type EndpointPreset = 'jev-official' | 'openai-official' | 'custom';
 
 export type ScanScope = 'replies-only' | 'timeline-and-replies';
 
+/**
+ * What happens to a post once it is scored:
+ * - `manual`    show the AI rate, the user decides
+ * - `auto-fold` fold replies over the threshold (default)
+ * - `strict`    fold, and auto-block the author above 90%
+ */
+export type ScanMode = 'manual' | 'auto-fold' | 'strict';
+
 export interface Settings {
   enabled: boolean;
   autoScan: boolean;
   scanScope: ScanScope;
+  scanMode: ScanMode;
   threshold: number; // 0..1, fold when score >= threshold
   skipShortText: boolean;
   shortTextMaxChars: number;
@@ -36,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   autoScan: true,
   scanScope: 'replies-only',
+  scanMode: 'auto-fold',
   threshold: 0.55,
   skipShortText: true,
   shortTextMaxChars: 12,
@@ -85,6 +95,11 @@ export interface DecisionResult {
   score: number; // 0..1
   reason: string;
   source: 'prefilter' | 'model' | 'cache' | 'skipped';
+  /**
+   * Which evidence actually produced `score`. Survives the cache rewrite of
+   * `source`, so automatic (destructive) actions can require model evidence.
+   */
+  evidence?: 'model' | 'prefilter';
   prefilter?: PrefilterResult;
   raw?: unknown;
 }

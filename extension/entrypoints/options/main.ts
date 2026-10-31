@@ -26,6 +26,10 @@ const STR: Record<string, Record<string, string>> = {
     scanScope: 'Scan scope',
     scopeReplies: 'Replies only',
     scopeAll: 'Timeline + replies',
+    scanMode: 'Mode',
+    modeManual: 'Manual — show the AI rate, you decide',
+    modeFold: 'Auto fold — hide replies over the threshold',
+    modeStrict: 'Strict — auto-block authors above 90%',
     threshold: 'Fold threshold',
     sectionModel: 'Decision model',
     endpointPreset: 'Endpoint',
@@ -61,6 +65,10 @@ const STR: Record<string, Record<string, string>> = {
     scanScope: '扫描范围',
     scopeReplies: '仅回复',
     scopeAll: '时间线 + 回复',
+    scanMode: '模式',
+    modeManual: '手动 —— 只显示疑似 AI 率，由你决定',
+    modeFold: '自动折叠 —— 超过阈值直接收起',
+    modeStrict: '严厉 —— 超过 90% 自动屏蔽作者',
     threshold: '折叠阈值',
     sectionModel: '决策模型',
     endpointPreset: '端点',
@@ -110,6 +118,7 @@ const fields: Array<keyof Settings> = [
   'skipShortText',
   'skipOwnPosts',
   'scanScope',
+  'scanMode',
   'threshold',
   'endpointPreset',
   'protocol',
@@ -161,6 +170,7 @@ function readForm(): Partial<Settings> {
     skipShortText: ($('skipShortText') as HTMLInputElement).checked,
     skipOwnPosts: ($('skipOwnPosts') as HTMLInputElement).checked,
     scanScope: ($('scanScope') as HTMLSelectElement).value as Settings['scanScope'],
+    scanMode: ($('scanMode') as HTMLSelectElement).value as Settings['scanMode'],
     threshold: Number(($('threshold') as HTMLInputElement).value),
     protocol: ($('protocol') as HTMLSelectElement).value as Settings['protocol'],
     endpointPreset: ($('endpointPreset') as HTMLSelectElement).value as EndpointPreset,
@@ -183,6 +193,7 @@ function fillForm(s: Settings) {
   ($('skipShortText') as HTMLInputElement).checked = s.skipShortText;
   ($('skipOwnPosts') as HTMLInputElement).checked = s.skipOwnPosts;
   ($('scanScope') as HTMLSelectElement).value = s.scanScope;
+  ($('scanMode') as HTMLSelectElement).value = s.scanMode;
   ($('threshold') as HTMLInputElement).value = String(s.threshold);
   const tv = document.getElementById('thresholdVal');
   if (tv) tv.textContent = s.threshold.toFixed(2);

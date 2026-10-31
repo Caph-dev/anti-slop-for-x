@@ -12,6 +12,7 @@
     <dl class="meta">
       <div><dt id="lblEndpoint"></dt><dd id="endpoint">—</dd></div>
       <div><dt id="lblModel"></dt><dd id="model">—</dd></div>
+      <div><dt id="lblMode"></dt><dd id="mode">—</dd></div>
       <div><dt id="lblScope"></dt><dd id="scope">—</dd></div>
       <div><dt id="lblStatus"></dt><dd id="status">—</dd></div>
     </dl>
@@ -22,6 +23,15 @@
     </div>
 
     <p class="note" id="note"></p>
+
+    <section class="log" id="log" hidden>
+      <div class="log-head">
+        <span id="lblLog"></span>
+        <button id="clearLog" class="link"></button>
+      </div>
+      <ul id="logList"></ul>
+      <p class="note" id="undoNote"></p>
+    </section>
 
     <script type="module" src="./main.ts"></script>
   </body>
