@@ -24,7 +24,6 @@ interface Strings {
   presetCustom: string;
   modeManual: string;
   modeFold: string;
-  modeStrict: string;
   logTitle: string;
   logClear: string;
   logEmpty: string;
@@ -63,7 +62,6 @@ const STR: Record<Lang, Strings> = {
     presetCustom: 'Custom',
     modeManual: 'Manual',
     modeFold: 'Auto fold',
-    modeStrict: 'Strict',
     logTitle: 'Recent automatic actions',
     logClear: 'Clear',
     logEmpty: 'None yet',
@@ -102,7 +100,6 @@ const STR: Record<Lang, Strings> = {
     presetCustom: '自定义',
     modeManual: '手动',
     modeFold: '自动折叠',
-    modeStrict: '严厉',
     logTitle: '最近的自动动作',
     logClear: '清空',
     logEmpty: '暂无',
@@ -165,12 +162,8 @@ function render(settings: Settings, t: Strings) {
   $('endpoint').textContent = endpointLabel(settings, t);
   $('endpoint').title = `${endpoint.baseUrl}${endpoint.path}`;
   $('model').textContent = endpoint.model || '—';
-  $('mode').textContent =
-    settings.scanMode === 'manual'
-      ? t.modeManual
-      : settings.scanMode === 'strict'
-        ? t.modeStrict
-        : t.modeFold;
+  // Strict is shelved; loadSettings downgrades any stored value to auto fold.
+  $('mode').textContent = settings.scanMode === 'manual' ? t.modeManual : t.modeFold;
   $('scope').textContent = settings.scanScope === 'replies-only' ? t.scopeReplies : t.scopeAll;
   $('status').textContent = !settings.enabled
     ? t.off

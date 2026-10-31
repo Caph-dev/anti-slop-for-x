@@ -1,7 +1,7 @@
 {
   "name": "anti-slop-for-x",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Detect and fold AI-slop / bot replies on X (x.com)",
   "workspaces": [
     "extension",

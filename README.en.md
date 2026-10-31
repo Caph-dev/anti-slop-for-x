@@ -11,7 +11,8 @@ Current version is v0.6.0. Verified on Chrome only. Not published to the Chrome 
 ```
 extension/  Chrome MV3 extension, WXT and TypeScript
 worker/     The 0.1.0-era local proxy; the extension no longer calls it
-docs/       Architecture, legacy proxy, privacy policy
+docs/       Architecture, strict mode design, legacy proxy, privacy policy
+ROADMAP.md  Planned work and shelved features
 ```
 
 ## How it works
@@ -55,7 +56,7 @@ The key lives in `chrome.storage.local` and is sent only to the base URL you sel
 
 The OpenAI preset was verified with a real key. `gpt-6-luna` appears in `/v1/models`, `POST https://api.openai.com/v1/decisions` returns HTTP 200, and `answers[]` matches the parser. The captured response is a fixture at `extension/tests/fixtures/openai-decisions-real.json`.
 
-## Modes
+## Two modes
 
 The Mode setting decides what happens after scoring.
 
@@ -63,30 +64,20 @@ The Mode setting decides what happens after scoring.
 |---|---|---|
 | Manual | Shows the AI likelihood, hides nothing | No |
 | Auto Fold (default) | Folds the reply | No |
-| Strict | Folds, and blocks the author when the model score reaches `max(0.9, threshold)` | Yes |
 
-Automatic blocking is destructive, so it runs behind several guards.
+Neither mode writes to your X account. Mute and block run only when you click them.
 
-- **Evidence gate**: only a decision-model score can start an automatic block. Prefilter-only scores, the prefilter-only setting, and the model-error fallback can fold at any score but never block.
-- **Rate limit**: at least 20 seconds between automatic actions, and at most 30 per day. Counters live in `chrome.storage.local` and are shared across tabs and reloads.
-- **Meltdown**: a 403 or 429 from X pauses automatic actions for one hour and reports it.
-- **Deduplication**: an account is recorded for 7 days under its `userId`, or its handle when the id is unknown. Records survive reloads and apply in every tab.
-- **Dequeue re-check**: before running a queued task, the extension re-checks that it is enabled, that the mode is still Strict, and that the account is not whitelisted or your own.
-- **Audit and undo**: every automatic action is logged, the last 50 entries are kept, and the popup shows them. An automatically blocked account can be unblocked from there.
+### Strict mode is off
 
-### Undo an automatic block
+There used to be a Strict mode that blocked the author automatically once the model score reached `max(0.9, threshold)`. It is switched off as of v0.7.0. The code stays, behind `STRICT_ENABLED` in `extension/lib/mode.ts`.
 
-In the popup's automatic action log, click Undo on that entry.
+Automatic blocking writes to your X account and the other person can see it, and this path has never run in a real browser session. A `strict` value left in `chrome.storage.local` is downgraded to auto fold when settings load. The stored value is kept, so re-enabling restores it.
 
-1. The extension calls `blocks/destroy.json` from any open x.com tab to remove the block.
-2. The account is added to the account whitelist, so Strict does not block it again on its next reply.
-3. The log entry is marked as undone.
-
-Unblocking needs an x.com page context to carry the session cookie and csrf token. When no x.com tab is open, the popup says so.
+The design and its guards are in [docs/strict-mode.md](docs/strict-mode.md). What has to be true before it returns is in [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2).
 
 ## What you see
 
-The toolbar icon opens a popup. It shows the current endpoint, model, mode, scan scope, and status, plus a "Scan current page" button and an "Options" button. A scan reports how many replies it handled and explains when there was nothing to scan.
+The toolbar icon opens a popup. It shows the current endpoint, model, mode, scan scope, and status, plus a "Scan current page" button and an "Options" button. A scan reports how many replies it handled and explains when there was nothing to scan. The automatic action log at the bottom stays empty while strict mode is off.
 
 A reply above the threshold folds into one full-width card.
 
@@ -113,9 +104,8 @@ Manual mute and block try X's native "···" menu first, then fall back to the 
 
 - Chrome MV3 only. The WXT layout leaves room for Firefox, but nothing is adapted or verified there.
 - Not on the Chrome Web Store. You load it from source or unzip the release asset.
-- Automatic blocking has no author-level evidence. A single high-scoring reply is enough, and a mistake can only be undone afterwards.
+- Strict mode is off. Its rate limiting, meltdown, and undo path have never run in a real browser, so the feature ships without an entry point. See [ROADMAP](ROADMAP.md).
 - Deduplication uses the handle, because `userId` is not parsed from the DOM yet.
-- Automatic blocking, rate limiting, the meltdown, and the undo path have not been exercised in a real browser session. Only type checking, unit tests, and the build cover them.
 - `worker/` is the 0.1.0-era proxy. The extension no longer calls it. See [docs/legacy-proxy.md](docs/legacy-proxy.md).
 
 ## Development
@@ -133,6 +123,8 @@ Manual mute and block try X's native "···" menu first, then fall back to the 
 ## Docs
 
 - [Architecture](docs/architecture.md): request path, endpoint presets, what BYOK does and does not protect
+- [Strict mode design](docs/strict-mode.md): the guards, the TLA+ model, and what re-enabling requires
+- [Roadmap](ROADMAP.md): shelved features and known gaps
 - [Legacy proxy](docs/legacy-proxy.md): what `worker/` was for, with a curl example
 - [Privacy policy draft](docs/privacy-policy.md)
 - [Changelog](CHANGELOG.md)

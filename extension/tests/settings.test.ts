@@ -96,6 +96,16 @@ describe('settings storage', () => {
     expect(loaded.upstreamBaseUrl).toBe('https://gateway.example.com/v1');
   });
 
+  it('downgrades a stored strict mode while the feature is shelved', async () => {
+    installChrome({ antiSlopForXSettings: { scanMode: 'strict' } });
+
+    const loaded = await loadSettings();
+
+    expect(loaded.scanMode).toBe('auto-fold');
+    // The stored value is untouched, so re-enabling the feature restores it.
+    expect((await loadSettings()).scanMode).toBe('auto-fold');
+  });
+
   it('defaults to the Jev preset when nothing is stored', async () => {
     installChrome({});
     const loaded = await loadSettings();

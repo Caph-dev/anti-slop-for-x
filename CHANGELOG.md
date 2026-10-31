@@ -1,11 +1,20 @@
 # Changelog
 
-## 未发布 / Unreleased
+## 0.7.0 — 2026-10-31
 
+Strict 模式（自动屏蔽）暂时关闭，代码保留；README 重写为中英两份。
+Strict mode (automatic blocking) is switched off, the code stays, and the README became a Chinese and an English pair.
+
+- 选项页不再提供 Strict。`extension/lib/mode.ts` 新增 `STRICT_ENABLED = false`，`decide()` 把 `strict` 当作 `auto-fold` 处理；`settings.ts` 在加载时同样降级，存储里的原值不删除，重新开启会恢复。
+- The options page no longer offers Strict. `extension/lib/mode.ts` gained `STRICT_ENABLED = false`, `decide()` treats `strict` as `auto-fold`, and `settings.ts` applies the same downgrade on load. The stored value is kept, so re-enabling restores it.
+- `extension/tests/mode.test.ts` 里 Strict 的断言改用 `describe.skipIf(!STRICT_ENABLED)`，开关打开后自动恢复执行；新增两条用例锁住「关闭期间永不自动屏蔽」。
+- The strict assertions in `extension/tests/mode.test.ts` moved behind `describe.skipIf(!STRICT_ENABLED)` and run again when the flag flips; two new cases lock the off behaviour.
+- 新增 `ROADMAP.md` 与 `docs/strict-mode.md`；重新开启的条件记录在 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。
+- Added `ROADMAP.md` and `docs/strict-mode.md`; the re-enabling checklist lives in issue #2.
 - 自动屏蔽在调用前重新读取模式与启用状态。TLA+ 模型（`AutoBlock.tla`，TLC）发现一个窗口：出队检查通过后还有两次存储往返（`isHandled`、`reserveAutoAction`），期间关掉 Strict 仍会发出屏蔽请求。
 - The automatic block path re-reads the mode and enabled flag right before the call. A TLA+ model (`AutoBlock.tla`, checked with TLC) found a window: after the dequeue check, two storage round trips ran before the call, so turning strict mode off in between still blocked the author.
-- README 重写为中英两份（`README.md` 中文，`README.en.md` 英文，互相链接）。修正两处与代码矛盾的描述：旧开头称「Mute / Block 仅在你点击时触发」，Strict 模式会自动屏蔽；旧安全边界段称自动屏蔽「无法在扩展内撤销」，popup 已支持撤销。旧的 `worker/` 使用说明移到 `docs/legacy-proxy.md`。
-- README rewritten as a Chinese and an English pair (`README.md` and `README.en.md`, cross-linked). Fixed two claims that contradicted the code: the old intro said mute/block only fire on click, which strict mode breaks, and the safety section said auto-blocks could not be undone, which the popup now does. The `worker/` instructions moved to `docs/legacy-proxy.md`.
+- README 的两处错误描述一并修正：旧开头称「Mute / Block 仅在你点击时触发」，旧安全边界段称自动屏蔽「无法在扩展内撤销」。`worker/` 的用法说明移到 `docs/legacy-proxy.md`。
+- Two wrong README claims are fixed: mute and block were described as click-only, and auto-blocks as impossible to undo. The `worker/` usage notes moved to `docs/legacy-proxy.md`.
 
 ## 0.6.0 — 2026-10-31
 

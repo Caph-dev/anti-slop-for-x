@@ -11,7 +11,8 @@
 ```
 extension/  Chrome MV3 扩展，WXT + TypeScript
 worker/     0.1.0 时代的本机代理，扩展已不再调用
-docs/       架构、旧版代理、隐私政策
+docs/       架构、Strict 模式设计、旧版代理、隐私政策
+ROADMAP.md  计划中与暂时关闭的功能
 ```
 
 ## 它怎么工作
@@ -55,7 +56,7 @@ key 只存在 `chrome.storage.local`，只发往你选的 Base URL。能读你 C
 
 OpenAI 预设用真实 key 验证过：`gpt-6-luna` 出现在 `/v1/models`，`POST https://api.openai.com/v1/decisions` 返回 HTTP 200，`answers[]` 与解析器一致。该响应已固化为测试夹具 `extension/tests/fixtures/openai-decisions-real.json`。
 
-## 三个模式
+## 两个模式
 
 选项页的 Mode 决定评分之后发生什么。
 
@@ -63,30 +64,20 @@ OpenAI 预设用真实 key 验证过：`gpt-6-luna` 出现在 `/v1/models`，`PO
 |---|---|---|
 | 手动 Manual | 只显示疑似 AI 率，内容不隐藏 | 否 |
 | 自动折叠 Auto Fold（默认） | 折叠回复 | 否 |
-| 严厉 Strict | 折叠；模型分数达到 `max(0.9, 阈值)` 时自动屏蔽作者 | 是 |
 
-自动屏蔽是破坏性动作，所以加了几道闸。
+两个模式都不写你的 X 账号。静音和屏蔽只在你自己点的时候执行。
 
-- **证据门槛**：只有决策模型给出的分数能触发自动屏蔽。仅预筛、勾选「仅预筛」、以及模型报错回退到预筛的分数，再高也只折叠。
-- **限速**：两次自动动作至少间隔 20 秒，每天最多 30 次。计数存在 `chrome.storage.local`，刷新和多标签共享。
-- **熔断**：X 返回 403 或 429 时暂停自动动作 1 小时并提示。
-- **去重**：按 `userId`（未知时用 handle）记账 7 天，跨标签页和刷新都生效。
-- **出队复查**：队列任务执行前重新检查扩展是否启用、是否仍在 Strict、是否命中白名单或自己的帖子。
-- **留痕与撤销**：每次自动动作写入日志，保留最近 50 条，在 popup 里查看。被自动屏蔽的账号可以撤销。
+### Strict 模式已关闭
 
-### 撤销一次自动屏蔽
+曾有一档「严厉」模式：模型分数达到 `max(0.9, 阈值)` 时自动屏蔽作者。它在 v0.7.0 时关闭，代码保留，开关是 `extension/lib/mode.ts` 里的 `STRICT_ENABLED`。
 
-在 popup 的自动动作日志里点该条右侧的「撤销」。
+原因是自动屏蔽会写入你的 X 账号，对方也能感知，而这条路径从未在真实浏览器会话中验证过。现在即使 `chrome.storage.local` 里还留着 `strict`，加载时也会降级成自动折叠；原值不删除，重新开启时会恢复。
 
-1. 扩展通过任意一个已打开的 x.com 标签页调用 `blocks/destroy.json` 解除屏蔽。
-2. 该账号加入账号白名单，避免 Strict 在下一条帖子上再屏蔽回去。
-3. 日志条目标记为已撤销。
-
-解除屏蔽需要 x.com 的页面上下文，才能带上登录 cookie 和 csrf token。没有打开的 x.com 标签页时 popup 会提示。
+设计与闸门写在 [docs/strict-mode.md](docs/strict-mode.md)，重新开启的条件在 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。
 
 ## 界面
 
-工具栏图标打开 popup，面板显示当前 endpoint、模型、模式、扫描范围和状态，并提供「扫描当前页」和「选项」两个按钮。扫描结束会报告处理了多少条，扫不到内容时说明原因。
+工具栏图标打开 popup，面板显示当前 endpoint、模型、模式、扫描范围和状态，并提供「扫描当前页」和「选项」两个按钮。扫描结束会报告处理了多少条，扫不到内容时说明原因。面板底部的自动动作日志在 Strict 关闭期间始终为空。
 
 超过阈值的回复折叠成一条整行宽的卡片。
 
@@ -113,9 +104,8 @@ OpenAI 预设用真实 key 验证过：`gpt-6-luna` 出现在 `/v1/models`，`PO
 
 - 只保证 Chrome MV3。WXT 结构便于以后加 Firefox，但尚未适配。
 - 未上架 Chrome Web Store，当前只能从源码加载，或解压 release 里的 zip。
-- 自动屏蔽没有作者级证据累积，一条高分回复就可能触发。误判只能事后撤销。
+- Strict 模式关闭。自动屏蔽的限速、熔断、撤销链路未经真机验证，因此不提供入口，见 [ROADMAP](ROADMAP.md)。
 - 去重按 handle 记账，`userId` 尚未从 DOM 解析。
-- 自动屏蔽、限速、熔断、撤销链路尚未在真实浏览器会话中验证，只有类型检查、单元测试和构建覆盖。
 - `worker/` 是 0.1.0 时代的代理，扩展已不再调用，说明见 [docs/legacy-proxy.md](docs/legacy-proxy.md)。
 
 ## 开发
@@ -133,6 +123,8 @@ OpenAI 预设用真实 key 验证过：`gpt-6-luna` 出现在 `/v1/models`，`PO
 ## 文档
 
 - [架构说明](docs/architecture.md)：请求链路、端点预设、BYOK 边界
+- [Strict 模式设计](docs/strict-mode.md)：闸门、TLA+ 模型、重新开启的条件
+- [路线图](ROADMAP.md)：暂时关闭的功能与已知缺口
 - [旧版代理](docs/legacy-proxy.md)：`worker/` 的用途与 curl 示例
 - [隐私政策草稿](docs/privacy-policy.md)
 - [变更记录](CHANGELOG.md)

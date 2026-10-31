@@ -17,6 +17,13 @@ export interface Decision {
   autoBlock: boolean;
 }
 
+/**
+ * Strict mode is shelved until the roadmap issue is resolved. The code path
+ * stays in place, but nothing reaches it: `settings.ts` downgrades a stored
+ * `strict` value and `decide()` ignores it here as well.
+ */
+export const STRICT_ENABLED = false;
+
 /** Strict mode never blocks below this score, whatever the fold threshold is. */
 export const STRICT_BLOCK_MIN_SCORE = 0.9;
 
@@ -44,7 +51,8 @@ export function decide(
 
   const score = result.score;
   const threshold = settings.threshold;
-  const mode: ScanMode = settings.scanMode;
+  const requested: ScanMode = settings.scanMode;
+  const mode: ScanMode = requested === 'strict' && !STRICT_ENABLED ? 'auto-fold' : requested;
 
   if (mode === 'strict' && score >= strictBlockThreshold(settings)) {
     return { presentation: 'fold', autoBlock: hasModelEvidence(result) };
