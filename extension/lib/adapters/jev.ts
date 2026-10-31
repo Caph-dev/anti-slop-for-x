@@ -3,6 +3,15 @@
  * Extension builds the payload; Worker only proxies with Authorization.
  */
 import type { PostExtract, Settings } from '../types';
+import {
+  BAIT_KIND_HUMAN_DESCRIPTION,
+  BAIT_KIND_INSTRUCTIONS,
+  BOT_LIKELIHOOD_INSTRUCTIONS,
+  BOT_LIKELIHOOD_LEVELS,
+  SLOP_FALSE,
+  SLOP_TRUE,
+  resolvePrompt,
+} from '../prompt';
 
 export interface JevPayload {
   model: string;
@@ -21,7 +30,7 @@ export function buildJevPayload(post: PostExtract, settings: Settings): JevPaylo
   const state: JevPayload['state'] = { post: { text: post.text } };
   if (post.parentText) state.parent = { text: post.parentText };
 
-  const prompt = settings.defaultPrompt || 'does this look like AI engagement bait / bot reply on X';
+  const prompt = resolvePrompt(settings);
 
   return {
     model: settings.model || 'jev-latest',
@@ -31,15 +40,15 @@ export function buildJevPayload(post: PostExtract, settings: Settings): JevPaylo
         type: 'noul',
         instructions: prompt,
         criteria: {
-          true: 'Reads like AI engagement bait, bot praise, template spam, or promo bait on X.',
-          false: 'Reads like a real person reacting, disagreeing, joking, or adding a specific point.',
+          true: SLOP_TRUE,
+          false: SLOP_FALSE,
         },
       },
       bait_kind: {
         type: 'choice',
-        instructions: 'If the post is low-quality engagement, which bucket fits best?',
+        instructions: BAIT_KIND_INSTRUCTIONS,
         criteria: {
-          human: 'Looks human / not bait',
+          human: BAIT_KIND_HUMAN_DESCRIPTION,
           praise_bot: 'Generic praise / agreement farm',
           pivot_slop: 'Rhetorical "not X, it\'s Y" style AI prose',
           promo: 'DM / airdrop / bio-link promo',
@@ -48,14 +57,8 @@ export function buildJevPayload(post: PostExtract, settings: Settings): JevPaylo
       },
       bot_likelihood: {
         type: 'score',
-        instructions: 'How likely is this an AI/bot engagement reply on X?',
-        criteria: [
-          'Clearly human',
-          'Probably human',
-          'Uncertain',
-          'Probably AI/bot',
-          'Clearly AI/bot bait',
-        ],
+        instructions: BOT_LIKELIHOOD_INSTRUCTIONS,
+        criteria: BOT_LIKELIHOOD_LEVELS,
       },
     },
   };

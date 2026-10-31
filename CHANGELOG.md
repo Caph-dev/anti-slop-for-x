@@ -24,6 +24,22 @@ Added a debug mode: turn it on in the popup and every rendered post with text on
 - 新增 `extension/lib/debug.ts`、`extension/lib/scan-state.ts` 及对应测试，外加 `tests/concurrency.test.ts`、`tests/score-invalidation.test.ts`；`scorePost` 增加可选的 `cacheKey` / `shouldCache`，`clearCache` 支持按前缀清理。测试覆盖：真实 `scorePost` 走模型路径时上游延迟返回、期间失效 → 不写缓存；重复触发只提交一次、失效后结果不渲染；并发上限上调与下调时队列的行为。content script 里的 DOM 挂载路径仍没有自动化测试。未在真实浏览器里跑过 UI，也未用真实 key 端到端验证。
 - Added `extension/lib/debug.ts`, `extension/lib/scan-state.ts` and their tests, plus `tests/concurrency.test.ts` and `tests/score-invalidation.test.ts`; `scorePost` gained optional `cacheKey` / `shouldCache`, and `clearCache` can drop a prefix. Tests cover the real `scorePost` model path with a delayed upstream that is invalidated mid-request (no cache write), one submission under repeated triggers, no render after invalidation, and queue behaviour when the concurrency cap is raised or lowered. The content script's DOM mounting path still has no automated test. The UI has not been run in a real browser, and no real-key end-to-end call was made.
 
+判定规则重写：目标是降低「短、平、像模板」这类误报，只有文本里出现具体的 AI 痕迹才扣分。实际分类效果未验证。
+Rewrote the classification rules so that shortness and plainness stop counting as evidence on their own; only a concrete tell in the text does. The actual classification effect is unverified.
+
+- 默认提示词由一句话换成一份规则（`extension/lib/prompt.ts` 的 `DEFAULT_PROMPT`）：列举 assistant 口吻、「不是 X 而是 Y」、空泛夸奖、引流/空投、模板对称与装饰 emoji 等具体痕迹；并明确短、干、正式、非母语、无 emoji、中日韩文本都是正常人类语域，不因「读起来很套路」加分。
+- The one-line default prompt became a rule set (`DEFAULT_PROMPT` in `extension/lib/prompt.ts`): assistant voice, "not X but Y", generic praise, promo/airdrop bait, template symmetry and decorative emoji are the tells; shortness, dryness, formality, non-native grammar, no emoji and CJK text are declared normal human register, and "it reads generic" is not a reason to score high.
+- 指向机器人账号的指令（如 `@bot 落实这一点`）被定义为「不足以判定机器写作」，而不是「一定由人写成」：正文里出现 bot 只说明作者写了这个词，多账号同一句也可能是真人复制公开指令；如果同一句话还带其他痕迹（引流、assistant 口吻、装饰 emoji），照样扣分。
+- A directive addressed to a bot account (e.g. `@bot 落实这一点`) is defined as insufficient evidence of machine authorship, not as proof a person wrote it: naming a bot only shows what the author typed, and the same line across accounts can be people copying a public instruction. If the line also carries another tell (promo bait, assistant voice, emoji decor), it still scores.
+- Jev 与 OpenAI Decisions 两个适配器共用同一份提示词与判定说明，`is_slop` / `bait_kind` / `bot_likelihood` 三个问题一起改。共用文案不等于三个答案必然一致：非 `human` 的 `bait_kind` 仍自带 0.55 下限，正好等于默认阈值，模型只要选错桶，这一条就足以让分数过线。
+- Both adapters (Jev and OpenAI Decisions) now share one prompt and one set of question descriptions, with `is_slop` / `bait_kind` / `bot_likelihood` changed together. Shared wording does not make the three answers agree: a non-`human` `bait_kind` still floors the score at 0.55, the default threshold, so one wrong bucket is enough to cross it.
+- 空提示词或只有空白的提示词现在回落到当前默认（此前回落的是一句话旧文案）；存储里与旧默认一致的文案在加载时升级为新默认，用户自己写过的提示词不动。保存提示词本来就算「评分设置变更」，会清缓存并重扫页面。
+- An empty or whitespace-only prompt now falls back to the current default (it used to fall back to the old one-liner), and a stored copy of the old default is upgraded on load while a user-written prompt is left alone. Saving a prompt already counts as a scoring-settings change, so it clears the cache and rescans.
+- 自定义提示词只替换 `is_slop` 这一问；`bait_kind` 与 `bot_likelihood` 保留固定措辞，因为模型必须按名字从固定桶/档位里作答。想让自定义规则也左右这两个问题，目前做不到。
+- A custom prompt replaces the `is_slop` question only; `bait_kind` and `bot_likelihood` keep their fixed wording because the model must answer by name from fixed buckets/levels. Custom rules cannot currently steer those two.
+- 未用真实 key 验证分数变化，也没有在浏览器里看过这些帖子折叠与否：规则重写是朝减少误报的方向改，实际百分比与假阴性都仍取决于上游模型。上报的三个账号与三条阳性对照记在 `extension/tests/fixtures/prompt-regression-cases.json`，留给以后在真实 key 下评估。
+- The score change is not verified with a real key, and folding was not observed in a browser: the rewrite is aimed at fewer false positives, while the actual percentages and any lost spam recall still depend on the upstream model. The three reported accounts plus three positive controls live in `extension/tests/fixtures/prompt-regression-cases.json` for later evaluation against a real key.
+
 ## 0.7.1 — 2026-10-31
 
 - 安装说明改为下载 release 产物，不再要求 `npm install` 和 `npm run unpacked`；构建步骤移到「开发」节。

@@ -1,4 +1,5 @@
 /** Shared types for Anti Slop for X */
+import { DEFAULT_PROMPT } from './prompt';
 
 export type ProtocolType = 'jev' | 'openai-decisions';
 
@@ -63,7 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   apiKey: '',
   model: 'jev-latest',
   protocol: 'jev',
-  defaultPrompt: 'does this look like AI engagement bait / bot reply on X',
+  defaultPrompt: DEFAULT_PROMPT,
   accountWhitelist: [],
   maxConcurrency: 4,
 };

@@ -3,6 +3,22 @@
  * POST typically to /v1/decisions
  */
 import type { PostExtract, Settings } from '../types';
+import {
+  BAIT_KIND_HUMAN_DESCRIPTION,
+  BAIT_KIND_INSTRUCTIONS,
+  BOT_LIKELIHOOD_INSTRUCTIONS,
+  BOT_LIKELIHOOD_LEVELS,
+  resolvePrompt,
+} from '../prompt';
+
+/** Wire labels for the score question; `scoreFromOpenAIDecisions` maps score/4. */
+const BOT_LEVEL_LABELS = [
+  'clearly_human',
+  'probably_human',
+  'uncertain',
+  'probably_bot',
+  'clearly_bot',
+];
 
 export interface OpenAIDecisionsPayload {
   model: string;
@@ -28,7 +44,7 @@ export function buildOpenAIDecisionsPayload(
   post: PostExtract,
   settings: Settings,
 ): OpenAIDecisionsPayload {
-  const prompt = settings.defaultPrompt || 'does this look like AI engagement bait / bot reply on X';
+  const prompt = resolvePrompt(settings);
   const parts = [`Post by @${post.handle}:\n${post.text}`];
   if (post.parentText) parts.unshift(`Parent:\n${post.parentText}\n`);
 
@@ -44,9 +60,9 @@ export function buildOpenAIDecisionsPayload(
       {
         type: 'choice',
         name: 'bait_kind',
-        instructions: 'If the post is low-quality engagement, which bucket fits best?',
+        instructions: BAIT_KIND_INSTRUCTIONS,
         choices: [
-          { value: 'human', description: 'Looks human / not bait' },
+          { value: 'human', description: BAIT_KIND_HUMAN_DESCRIPTION },
           { value: 'praise_bot', description: 'Generic praise / agreement farm' },
           { value: 'pivot_slop', description: 'Rhetorical AI prose' },
           { value: 'promo', description: 'DM / airdrop / bio-link promo' },
@@ -56,14 +72,11 @@ export function buildOpenAIDecisionsPayload(
       {
         type: 'score',
         name: 'bot_likelihood',
-        instructions: 'How likely is this an AI/bot engagement reply on X?',
-        levels: [
-          { label: 'clearly_human' },
-          { label: 'probably_human' },
-          { label: 'uncertain' },
-          { label: 'probably_bot' },
-          { label: 'clearly_bot' },
-        ],
+        instructions: BOT_LIKELIHOOD_INSTRUCTIONS,
+        levels: BOT_LEVEL_LABELS.map((label, i) => ({
+          label,
+          description: BOT_LIKELIHOOD_LEVELS[i]?.split(' — ').slice(1).join(' — ') || undefined,
+        })),
       },
     ],
   };

@@ -6,6 +6,7 @@ import {
   settingsKey,
 } from '../lib/settings';
 import { DEFAULT_SETTINGS } from '../lib/types';
+import { DEFAULT_PROMPT } from '../lib/prompt';
 import { ENDPOINT_PRESETS, resolveEndpoint } from '../lib/endpoints';
 import { resolveUpstreamPath } from '../lib/adapters';
 
@@ -127,6 +128,34 @@ describe('settings storage', () => {
     expect(saved.debugMode).toBe(true);
     expect((store.antiSlopForXSettings as { debugMode?: boolean }).debugMode).toBe(true);
     expect((await loadSettings()).debugMode).toBe(true);
+  });
+
+  it('upgrades a stored prompt that is only the old shipped default', async () => {
+    installChrome({
+      antiSlopForXSettings: {
+        defaultPrompt: 'does this look like AI engagement bait / bot reply on X',
+      },
+    });
+
+    const loaded = await loadSettings();
+
+    // The field was never edited, so prompt fixes must reach the user.
+    expect(loaded.defaultPrompt).toBe(DEFAULT_PROMPT);
+    expect(loaded.defaultPrompt).not.toContain('does this look like AI engagement bait');
+  });
+
+  it('never overwrites a prompt the user wrote', async () => {
+    installChrome({ antiSlopForXSettings: { defaultPrompt: 'Flag only hype-y reply guys.' } });
+
+    expect((await loadSettings()).defaultPrompt).toBe('Flag only hype-y reply guys.');
+  });
+
+  it('keeps an empty prompt empty (the adapters fall back to the default)', async () => {
+    installChrome({ antiSlopForXSettings: { defaultPrompt: '   ' } });
+
+    // Only the shipped one-liner is upgraded; an emptied field stays emptied so
+    // the options page shows what the user actually stored.
+    expect((await loadSettings()).defaultPrompt).toBe('   ');
   });
 
   it('defaults to the Jev preset when nothing is stored', async () => {

@@ -26,11 +26,26 @@ export async function loadSettings(): Promise<Settings> {
 }
 
 /**
+ * Prompts this extension used to ship. A stored value equal to one of them was
+ * never edited by the user, so an upgrade may replace it; anything else is a
+ * deliberate custom prompt and stays untouched.
+ */
+const LEGACY_DEFAULT_PROMPTS = new Set([
+  'does this look like AI engagement bait / bot reply on X',
+]);
+
+/**
  * Settings written before `endpointPreset` existed get one inferred from their
  * base URL + protocol, so an upgrade never silently repoints the upstream.
  *
  * A stored `strict` mode is downgraded while the feature is shelved. The stored
  * value is left alone, so re-enabling the feature restores the user's choice.
+ *
+ * A stored `defaultPrompt` that matches a shipped-with default (after trimming)
+ * is upgraded in place: users who never touched the field keep getting prompt
+ * fixes, and users who wrote their own prompt are never overwritten. A prompt of
+ * only whitespace matches neither rule: it stays stored as typed, and the
+ * adapters fall back to the current default when they build a request.
  */
 function normalize(raw: Partial<Settings>): Settings {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
@@ -39,6 +54,9 @@ function normalize(raw: Partial<Settings>): Settings {
   }
   if (merged.scanMode === 'strict' && !STRICT_ENABLED) {
     merged.scanMode = 'auto-fold';
+  }
+  if (LEGACY_DEFAULT_PROMPTS.has((merged.defaultPrompt ?? '').trim())) {
+    merged.defaultPrompt = DEFAULT_SETTINGS.defaultPrompt;
   }
   return merged;
 }

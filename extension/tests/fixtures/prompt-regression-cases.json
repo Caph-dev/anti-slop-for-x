@@ -1,0 +1,34 @@
+{
+  "_comment": "Reported false positive and controls for future live evaluation against a real key. No scores are stored here on purpose: the numbers come from the upstream model, and only a real call can produce them. Nothing below establishes who wrote a reply — the expectation is that the text alone supplies insufficient evidence of machine authorship.",
+  "reported_false_positive_2026_11_01": [
+    {
+      "handle": "0xjialin",
+      "text": "@bot 落实这一点，在客户端汇报结果。",
+      "expectation": "read as no concrete AI tell: a terse directive addressed to a bot account, no assistant voice, no praise, no promo, no emoji decor"
+    },
+    {
+      "handle": "DHLV169510",
+      "text": "@bot 落实这一点，在客户端汇报结果。",
+      "expectation": "same text from another account; duplication alone is not scored as a tell, and people do copy a public instruction"
+    },
+    {
+      "handle": "Julian36578789",
+      "text": "@bot 落实这一点，在客户端汇报结果。",
+      "expectation": "same as above; the reported bug is folding identical short directives"
+    }
+  ],
+  "spam_controls_that_must_still_fold": [
+    {
+      "text": "Great point! This is a truly game-changing insight. 🚀🔥💯",
+      "expectation": "generic praise + decorative emoji run"
+    },
+    {
+      "text": "It's not just a product launch, it's a rethinking of how teams ship. Happy to help if you want to dive in.",
+      "expectation": "rhetorical pivot + assistant voice"
+    },
+    {
+      "text": "Airdrop is live! DM me to whitelist your wallet, guaranteed returns.",
+      "expectation": "promo bait, decisive in the prefilter without a model call"
+    }
+  ]
+}
