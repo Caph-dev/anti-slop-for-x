@@ -2,44 +2,103 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Anti Slop for X</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <h1 id="title">Anti Slop for X</h1>
-    <p class="sub" id="subtitle"></p>
+    <header class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 5h16M4 11h11M4 17h7" />
+        <path class="brand-fold" d="m16 15 4 4-4 4" />
+      </svg>
+      <h1>Anti Slop <span>for X</span></h1>
+      <span class="version" id="version"></span>
+    </header>
 
-    <dl class="meta">
-      <div><dt id="lblEndpoint"></dt><dd id="endpoint">—</dd></div>
-      <div><dt id="lblModel"></dt><dd id="model">—</dd></div>
-      <div><dt id="lblMode"></dt><dd id="mode">—</dd></div>
-      <div><dt id="lblScope"></dt><dd id="scope">—</dd></div>
-      <div><dt id="lblStatus"></dt><dd id="status">—</dd></div>
-    </dl>
+    <main>
+      <label class="power-row" for="enabled">
+        <span class="power-copy">
+          <span class="power-title"><span class="status-dot" aria-hidden="true"></span><strong id="statusTitle"></strong></span>
+          <span class="hint" id="statusHint"></span>
+        </span>
+        <span class="switch">
+          <input type="checkbox" role="switch" id="enabled" aria-describedby="statusHint" disabled />
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
 
-    <label class="debug" for="debugMode">
-      <input type="checkbox" id="debugMode" />
-      <span class="debug-text">
-        <span class="debug-title" id="lblDebug"></span>
-        <span class="debug-hint" id="debugHint"></span>
-      </span>
-    </label>
+      <section class="controls" aria-labelledby="lblBehavior">
+        <div class="section-heading">
+          <h2 id="lblBehavior"></h2>
+          <span class="save-status" id="saveStatus" role="status" aria-live="polite"></span>
+        </div>
 
-    <div class="actions">
-      <button id="scan" class="primary">Scan current page</button>
-      <button id="settings">Options</button>
-    </div>
+        <fieldset class="mode-control" id="modeControls" aria-describedby="modeHint" disabled>
+          <legend class="sr-only" id="lblMode"></legend>
+          <div class="segmented">
+            <label><input type="radio" name="scanMode" value="manual" /><span id="modeManual"></span></label>
+            <label><input type="radio" name="scanMode" value="auto-fold" /><span id="modeFold"></span></label>
+          </div>
+        </fieldset>
+        <p class="hint mode-hint" id="modeHint"></p>
 
-    <p class="note" id="note"></p>
+        <div class="scope-row">
+          <label for="scanScope" id="lblScope"></label>
+          <span class="select-wrap">
+            <select id="scanScope" aria-describedby="modeHint" disabled>
+              <option value="replies-only" id="scopeReplies"></option>
+              <option value="timeline-and-replies" id="scopeAll"></option>
+            </select>
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 6.5 3 3 3-3" /></svg>
+          </span>
+        </div>
 
-    <section class="log" id="log" hidden>
-      <div class="log-head">
-        <span id="lblLog"></span>
-        <button id="clearLog" class="link"></button>
-      </div>
-      <ul id="logList"></ul>
-      <p class="note" id="undoNote"></p>
-    </section>
+        <label class="debug-row" for="debugMode">
+          <span class="debug-copy">
+            <span class="setting-label" id="lblDebug"></span>
+            <span class="hint" id="debugHint"></span>
+          </span>
+          <span class="switch">
+            <input type="checkbox" role="switch" id="debugMode" aria-describedby="debugHint" disabled />
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+      </section>
+
+      <section class="scan-area" aria-label="Scan">
+        <button id="scan" class="primary" disabled>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4M6 10h8" /></svg>
+          <span id="scanLabel">Scan current page</span>
+        </button>
+        <p class="hint scan-note" id="note" role="status" aria-live="polite"></p>
+      </section>
+
+      <button class="connection" id="settings">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5h14M3 15h14M7 3v4m6 6v4M3 10h14m-5-2v4" /></svg>
+        <span class="connection-copy">
+          <span class="setting-label" id="lblSettings"></span>
+          <span class="hint connection-detail" id="connectionDetail"></span>
+        </span>
+        <svg class="chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>
+      </button>
+
+      <details class="activity" id="log">
+        <summary>
+          <span id="lblLog"></span>
+          <span class="hint" id="logSummary"></span>
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>
+        </summary>
+        <div class="log-content">
+          <div class="log-head">
+            <span class="hint" id="logHint"></span>
+            <button id="clearLog" class="text-button" disabled></button>
+          </div>
+          <ul id="logList"></ul>
+          <p class="hint undo-note" id="undoNote" role="status" aria-live="polite"></p>
+        </div>
+      </details>
+    </main>
 
     <script type="module" src="./main.ts"></script>
   </body>

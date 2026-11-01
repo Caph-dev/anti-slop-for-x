@@ -55,6 +55,7 @@ async function boot() {
       const prev = settings;
       const debugToggled = s.debugMode !== prev.debugMode;
       const scoringChanged = scoringSettingsChanged(prev, s);
+      const presentationChanged = s.scanMode !== prev.scanMode || s.scanScope !== prev.scanScope;
       const enabledChanged = s.enabled !== prev.enabled;
       const thresholdChanged = s.threshold !== prev.threshold;
 
@@ -65,21 +66,21 @@ async function boot() {
       // *and* flip debug mode, and both caches must react to it.
       if (scoringChanged) clearCache();
       if (debugToggled) clearCache('debug:');
-      if (scoringChanged || debugToggled || enabledChanged) scan.invalidate();
+      if (scoringChanged || presentationChanged || debugToggled || enabledChanged) scan.invalidate();
 
       if (!s.enabled) {
         unmountAll();
         return;
       }
 
-      if (scoringChanged || debugToggled || enabledChanged) {
-        // Every mounted card was decided under the old policy. Re-present the
-        // page when we are allowed to scan; with auto-scan off, a manual scan
-        // re-scores it (the cache was dropped, so nothing stale comes back).
+      if (scoringChanged || presentationChanged || debugToggled || enabledChanged) {
+        // Mode and scope edits reuse scores, but old cards and in-flight work
+        // must not survive a change in what the popup says will be displayed.
+        // With automatic scans off, clear the old UI and wait for a manual scan.
         if (s.debugMode || s.autoScan) {
           unmountAll();
           void scanVisible(s.debugMode);
-        } else if (debugToggled) {
+        } else if (debugToggled || presentationChanged) {
           unmountAll();
         }
         return;
