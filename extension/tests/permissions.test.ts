@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { originPattern, requestOriginAccess } from '../lib/permissions';
+import { hasOriginAccess, originPattern, requestOriginAccess } from '../lib/permissions';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -25,6 +25,21 @@ describe('originPattern', () => {
     expect(originPattern('not a url')).toBeNull();
     expect(originPattern('file:///etc/passwd')).toBeNull();
     expect(originPattern('chrome-extension://abc/x')).toBeNull();
+  });
+});
+
+describe('hasOriginAccess', () => {
+  it('uses the host pattern and fails closed when permission is missing or cannot be checked', async () => {
+    const contains = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockRejectedValueOnce(new Error('unavailable'));
+    vi.stubGlobal('chrome', { permissions: { contains } });
+    await expect(hasOriginAccess('https://example.com/v1')).resolves.toBe(true);
+    await expect(hasOriginAccess('https://example.com/v1')).resolves.toBe(false);
+    await expect(hasOriginAccess('https://example.com/v1')).resolves.toBe(false);
+    await expect(hasOriginAccess('invalid')).resolves.toBe(false);
+    expect(contains).toHaveBeenCalledTimes(3);
+    expect(contains).toHaveBeenCalledWith({ origins: ['https://example.com/*'] });
+    vi.stubGlobal('chrome', { permissions: {} });
+    await expect(hasOriginAccess('https://example.com/v1')).resolves.toBe(false);
   });
 });
 

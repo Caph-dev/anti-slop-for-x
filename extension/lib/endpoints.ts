@@ -4,6 +4,10 @@
  * A preset fully determines base URL, decisions path, payload protocol and
  * model, so picking one cannot leave the settings in a half-configured state.
  * `custom` uses whatever the user typed.
+ *
+ * Only `openai-responses` can produce recognitions with checkable evidence.
+ * The Jev and Decisions entries stay so stored settings keep their meaning;
+ * they report "unsupported" and are never called or swapped for another one.
  */
 import type { EndpointPreset, ProtocolType, Settings } from './types';
 import { DEFAULT_SETTINGS } from './types';
@@ -23,6 +27,14 @@ export const ENDPOINT_PRESETS: Record<PresetName, EndpointConfig> = {
     path: '/systemone',
     protocol: 'jev',
     model: 'jev-latest',
+  },
+  'openai-responses': {
+    baseUrl: 'https://api.openai.com/v1',
+    path: '/responses',
+    protocol: 'openai-responses',
+    // No default: the user names a model their account can use with
+    // structured outputs. Nothing is sent until they do.
+    model: '',
   },
   'openai-official': {
     baseUrl: 'https://api.openai.com/v1',
@@ -59,12 +71,25 @@ export function resolveEndpoint(settings: EndpointSettings): EndpointConfig {
   };
 }
 
+export function credentialCrossesOrigin(previous: Settings, next: Settings): boolean {
+  const key = previous.apiKey.trim();
+  if (!key || key !== next.apiKey.trim()) return false;
+  try {
+    return new URL(resolveEndpoint(previous).baseUrl).origin !== new URL(resolveEndpoint(next).baseUrl).origin;
+  } catch {
+    return true;
+  }
+}
+
 function normalizeBase(url: string | undefined): string {
   return (url || '').trim().replace(/\/+$/, '');
 }
 
 function matchesPreset(settings: Partial<Settings>, name: PresetName): boolean {
   const preset = ENDPOINT_PRESETS[name];
+  // Responses is only ever an explicit choice. Settings saved before it existed
+  // never infer it, so an upgrade cannot start sending to a new protocol.
+  if (preset.protocol === 'openai-responses') return false;
   if (normalizeBase(settings.upstreamBaseUrl) !== preset.baseUrl) return false;
   if ((settings.protocol ?? preset.protocol) !== preset.protocol) return false;
   // Compare the path that would actually have been used: a missing path falls

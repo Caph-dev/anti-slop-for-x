@@ -24,6 +24,17 @@ export function originPattern(url: string): string | null {
   }
 }
 
+/** Check the current grant without prompting; an unavailable API fails closed. */
+export async function hasOriginAccess(url: string): Promise<boolean> {
+  const pattern = originPattern(url);
+  if (!pattern || typeof chrome === 'undefined' || !chrome.permissions?.contains) return false;
+  try {
+    return await chrome.permissions.contains({ origins: [pattern] });
+  } catch {
+    return false;
+  }
+}
+
 /** Unchecked request: safe to call directly in a click handler (no earlier await). */
 export function requestOriginAccess(url: string): Promise<boolean> {
   const pattern = originPattern(url);

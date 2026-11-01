@@ -1,38 +1,41 @@
 /** Shared types for Anti Slop for X */
 import { DEFAULT_PROMPT } from './prompt';
 
-export type ProtocolType = 'jev' | 'openai-decisions';
+export type ProtocolType = 'jev' | 'openai-decisions' | 'openai-responses';
 
 /**
- * Which upstream the extension talks to. The two official presets carry their
- * own base URL / path / protocol / model; `custom` uses the user's fields.
+ * Which upstream the extension talks to. A preset carries its own base URL /
+ * path / protocol (and a default model); `custom` uses the user's fields.
+ * Only the `openai-responses` protocol can return checkable evidence; the
+ * Jev and Decisions protocols are kept selectable but report "unsupported".
  */
-export type EndpointPreset = 'jev-official' | 'openai-official' | 'custom';
+export type EndpointPreset = 'jev-official' | 'openai-official' | 'openai-responses' | 'custom';
 
 export type ScanScope = 'replies-only' | 'timeline-and-replies';
 
 /**
- * What happens to a post once it is scored:
- * - `manual`    show the AI rate, the user decides
- * - `auto-fold` fold replies over the threshold (default)
- * - `strict`    fold, and auto-block the author above 90%
+ * - `manual`: mark possible low-quality posts with evidence; the user decides.
+ * - `shadow`: record outcomes for this tab only; posts are never changed.
+ * Legacy `auto-fold` / `strict` stay readable in storage and behave as `shadow`:
+ * automatic model folding and automatic blocking are not available.
  */
-export type ScanMode = 'manual' | 'auto-fold' | 'strict';
+export type ScanMode = 'manual' | 'shadow' | 'auto-fold' | 'strict';
 
 export interface Settings {
   enabled: boolean;
   autoScan: boolean;
   scanScope: ScanScope;
   scanMode: ScanMode;
-  threshold: number; // 0..1, fold when score >= threshold
+  /** Legacy score threshold, kept as stored. Recognition has no score and never reads it. */
+  threshold: number;
+  /** No-send preference: posts shorter than `shortTextMaxChars` are never sent. Not a quality judgment. */
   skipShortText: boolean;
   shortTextMaxChars: number;
+  /** No-send preference for your own posts; they are also never marked. */
   skipOwnPosts: boolean;
-  prefilterOnly: boolean; // skip model
-  /**
-   * Read-only diagnostic: score every post on the page and show its AI rate.
-   * Never folds, never blocks, and does not read the normal score cache.
-   */
+  /** Legacy name for "model use off": nothing is sent, including manual scans and debug. */
+  prefilterOnly: boolean;
+  /** Per-post diagnostics in manual mode. Overrides autoScan, but obeys enable, scope, opt-out and shadow. */
   debugMode: boolean;
   /** Built-in endpoint preset, or `custom` to use the fields below. */
   endpointPreset: EndpointPreset;
@@ -42,8 +45,16 @@ export interface Settings {
   apiKey: string;
   model: string;
   protocol: ProtocolType;
+  /** Legacy Jev / Decisions prompt. Preserved verbatim; never sent by the Responses recognizer. */
   defaultPrompt: string;
-  accountWhitelist: string[]; // handles without @
+  /**
+   * Opaque revision changed by `saveSettings` whenever `apiKey` changes. Request
+   * identity uses it instead of the key, so a key change never reuses results.
+   * Numbers are accepted for existing stored settings; new revisions are random.
+   */
+  credentialRevision: number | string;
+  accountWhitelist: string[]; // explicit local keep rules, handles without @
+  accountHideList: string[]; // explicit local hiding, never X blocking
   maxConcurrency: number;
 }
 
@@ -51,9 +62,9 @@ export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   autoScan: true,
   scanScope: 'replies-only',
-  scanMode: 'auto-fold',
+  scanMode: 'shadow',
   threshold: 0.55,
-  skipShortText: true,
+  skipShortText: false,
   shortTextMaxChars: 12,
   skipOwnPosts: true,
   prefilterOnly: false,
@@ -65,7 +76,9 @@ export const DEFAULT_SETTINGS: Settings = {
   model: 'jev-latest',
   protocol: 'jev',
   defaultPrompt: DEFAULT_PROMPT,
+  credentialRevision: 0,
   accountWhitelist: [],
+  accountHideList: [],
   maxConcurrency: 4,
 };
 

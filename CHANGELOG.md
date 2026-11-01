@@ -1,5 +1,37 @@
 # Changelog
 
+## 未发布 / Unreleased
+
+判定轴从「作者来源」改为「给定上下文里的内容质量」，自动折叠与自动屏蔽改为影子评测加用户可控的呈现。未改版本号。
+The axis moved from authorship to content quality in the supplied context; automatic folding and automatic blocking became shadow evaluation plus user-controlled presentation. No version bump.
+
+- 新增内容质量识别：`normal`、`engagement_bait`、`generic_irrelevant`、`content_free_restatement`，无法判断时弃权。短、带情绪、口语、正式、非母语、中日韩文本本身都不构成任何类别，风格也不再当作来源证据。类别定义见 `docs/content-taxonomy.md`。
+- Added content-quality recognition: `normal`, `engagement_bait`, `generic_irrelevant`, `content_free_restatement`, and abstention when the evidence is insufficient. Short, emotional, colloquial, formal, non-native and CJK text is not a category by itself, and style is no longer treated as evidence of origin. Categories are defined in `docs/content-taxonomy.md`.
+- 只有 OpenAI Responses（结构化输出 + 逐字引文）能发请求。Jev 与 Decisions 仍可选，但选中时明确提示「无法返回可核对证据，请改用 OpenAI Responses」，发送零请求，且不会被自动换成别的端点；Responses 没有默认模型，模型名为空即不发送。
+- Only OpenAI Responses (structured output plus literal quotes) sends requests. Jev and Decisions remain selectable but say outright that they cannot return checkable evidence, send nothing, and are never auto-swapped; Responses has no default model, and an empty model means nothing is sent.
+- 引文在本地与页面文本按规范化后比对，找不到原文就整条判为 `invalid_provenance`；比较类判断额外要求完整父帖或引用帖证据。模型理由显示为未核验的解释。
+- Quotes are matched against the page text after normalisation, and a quote that cannot be located fails the whole judgment as `invalid_provenance`; comparison categories additionally require evidence from a complete parent or quoted post. The model's rationale is shown as an unverified explanation.
+- 模式改为「仅标记 / 仅记录」。旧 `auto-fold` / `strict` 按仅记录运行；没有任何模式会按模型结果自动折叠或在 X 上自动屏蔽账号。用户隐藏规则仍可本地折叠；折叠也可由用户点击触发，且随时可展开。正在阅读的内容只标记，保留名单优先于隐藏规则。
+- Modes became Mark only / Record only. Legacy `auto-fold` and `strict` run as record-only; no mode automatically folds on a model judgment or blocks an account. User hide rules can still fold locally, and users can fold a marked post themselves. Folds are reversible, posts being read are marked instead, and the keep list wins over the hide rule.
+- 新增本地准入并在发送前重查：总开关、扫描范围、短帖偏好、自己的帖子（页面读不到当前账号时也不发送）、保留与隐藏规则、配置问题、缺失的必要上下文。`prefilterOnly` 仍然阻止一切模型请求，包括手动扫描、调试模式和「测试连接」；旧设置里存的 `skipShortText` 保持原意，新安装默认不跳过。
+- Added a local admission check that is re-run right before transport: global switch, scope, short-text preference, own posts (including when the page does not reveal the current account), keep and hide rules, configuration problems, and missing required context. `prefilterOnly` still blocks every model request, including manual scans, debug mode and "Test connection"; a stored legacy `skipShortText` keeps its no-send meaning while new installs do not skip.
+- 调试模式覆盖 `autoScan`，但仍遵守总开关、扫描范围、不发送偏好与你的规则；仅记录模式下不注入徽标，影子结果只出现在 popup 的记录里。
+- 名单编辑按增删合并并发更改，新增用户名会校验格式；旧非空无效条目保留并提示，过大的旧名单可分批缩小。未保存或其他页面更改的设置不会被状态行误称为已生效。
+- Account-list edits merge concurrent additions and removals. New handles are validated; nonblank invalid legacy entries are retained and flagged, and oversized legacy lists can be reduced in batches. The status line does not present unsaved or externally changed settings as active.
+- Debug mode overrides `autoScan` but still obeys the global switch, scope, no-send preferences and your rules; in record-only mode no badge is injected and shadow results appear only in the popup's record.
+- 新增每标签页内存诊断：模型请求尝试次数、平均响应时间、`status:code` 计数、本该被自动折叠的条数、已应用的呈现与误判反馈。按帖子 ID 去重，不写存储，也不含原文、账号、密钥或模型说明。
+- Added per-tab in-memory diagnostics: model request attempts, mean response time, `status:code` counts, how many posts an automatic policy would have folded, applied presentations and "not accurate" reports. Deduplication uses post IDs; nothing is persisted and no post text, account, key or model rationale is stored.
+- 请求体只含来源文本与状态（`available` / `partial` / `missing` / `unknown` / `not-applicable`，不完整时附原因）。作者 handle 与 `isOwn` 只是本地守则用的元数据，不进请求；媒体不上传，只标记为看不到。
+- The request body carries only source text and states (`available` / `partial` / `missing` / `unknown` / `not-applicable`, with gaps when incomplete). The author handle and `isOwn` are local-only metadata for your rules and never enter the request; media is never uploaded, only flagged as unseen.
+- 复用已有 key 到新的 origin 需要显式确认；「测试连接」只发送一条为本功能编写的合成帖子，并同样受扩展总开关、模型调用开关与配置检查约束。
+- Reusing an existing key on a new origin now requires explicit confirmation, and "Test connection" sends only a synthetic post written for that purpose, subject to the extension switch, model-use switch and configuration checks.
+- 新增 `docs/content-taxonomy.md`、`scripts/evaluate-issue3.mjs` 与 `docs/issue3-evaluation.md`。离线评估只接受元数据输入（不含原文），做输入校验与机械检查，并且永远拒绝发布授权：真实采样方法与数据集需要独立评审。
+- Added `docs/content-taxonomy.md`, `scripts/evaluate-issue3.mjs` and `docs/issue3-evaluation.md`. The offline evaluator accepts metadata only (never post text), validates inputs and runs mechanical checks, and always blocks release authorization: a real sampling method and dataset need independent review.
+- 目前无法证明：扩展不把相邻帖或焦点帖猜作父帖，因此普通回复的比较类覆盖有限；完整引用帖可以作为对照。带媒体或被「显示更多」截断的文本按上下文不完整处理、不发送；仅回复模式依赖可见的「Replying to @」表头，可能漏掉回复；读不到当前账号时「不发送我的帖子」会阻止发送。
+- Current limits: the extension does not infer parents from adjacent or focal posts, limiting comparison categories on ordinary replies; a complete embedded quote can serve as context. Media or truncated text is treated as incomplete and not sent; replies-only depends on a visible "Replying to @" header and can miss replies; when the current account is unknown, the own-post preference blocks sending.
+- 未验证：没有自然/困难分层的标注数据集，也没有独立冻结评估；未用真实 provider key 做端到端调用，未在真实 X 页面验证提取与呈现，未在真实浏览器扩展环境里跑完整流程。浏览器检查使用本机合成页面与模拟 Chrome API，不证明分类质量。
+- Unverified: there is no natural/difficult labelled dataset and no independent frozen evaluation; no real-provider-key end-to-end call, real-X extraction or presentation check, or full browser-extension runtime check was made. Browser checks used local synthetic pages and mocked Chrome APIs; they do not establish classification quality.
+
 ## 0.9.0 — 2026-10-31
 
 - 调试徽标同时显示两个分数，用 `|` 分隔：`AI 56% | 47%`，前者是决策模型返回的分数，后者是与预筛混合后真正参与判定的分数。模型没跑（仅预筛、模型报错）时模型位显示 `–`，悬停提示 `模型分 | 最终分`。

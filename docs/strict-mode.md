@@ -1,8 +1,8 @@
 # Strict mode（已关闭）
 
-Strict 模式在 v0.7.0 时关闭。代码保留，行为可通过 `STRICT_ENABLED` 打开。当前状态与重新开启的条件见 [ROADMAP](../ROADMAP.md) 和 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。
+Strict 模式在 v0.7.0 时关闭。未发布的 issue #3 改动没有接入自动屏蔽路径，也没有 `STRICT_ENABLED` 启动开关；旧 `strict` 设置按「仅记录」运行。当前决策见 [ROADMAP](../ROADMAP.md) 和 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。
 
-这一页记录它本来要做什么，以及为什么现在不该跑。
+下文是 v0.7.0 之前的历史设计与验证记录，不描述当前代码，也不是重新开启的操作指南。
 
 ## 它做什么
 
@@ -39,7 +39,7 @@ Strict 模式在 v0.7.0 时关闭。代码保留，行为可通过 `STRICT_ENABL
 
 ## 重新开启要做的
 
-见 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。最少需要一次真实屏蔽、一次真实撤销，以及四项限速检查。`extension/tests/mode.test.ts` 里 `describe.skipIf(!STRICT_ENABLED)` 那组断言会在开关打开后自动恢复执行。
+见 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。任何重新设计都需要单独决策，并验证真实屏蔽、撤销和限速行为；旧测试开关已不适用于当前识别流程。
 
 ## 已知缺口
 

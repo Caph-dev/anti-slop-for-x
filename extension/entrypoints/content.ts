@@ -1,30 +1,38 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
-import { loadSettings, scoringSettingsChanged, settingsKey } from '../lib/settings';
-import { scorePost } from '../lib/scorer';
+import { loadSettings, recognitionSettingsChanged, settingsKey } from '../lib/settings';
+import {
+  admission,
+  createRecognizer,
+  recognitionIdentity,
+  requestFingerprint,
+  sendRecognition,
+} from '../lib/scorer';
 import { createLimiter } from '../lib/concurrency';
-import { createScanState } from '../lib/scan-state';
+import { createScanState, shouldScan, type ScanTicket } from '../lib/scan-state';
 import {
   currentUserHandle,
-  extractTweet,
-  listTweets,
-  parentCreatedAtMs,
-  parentTextFor,
+  inScope,
+  listArticles,
+  postIdOf,
+  readSnapshot,
+  type PostSnapshot,
 } from '../lib/x/dom';
 import { blockUser, muteUser, unblockUser } from '../lib/x/mute-block';
-import { alreadyMounted, clearMounted, mountDebugBadge, mountResult } from '../lib/ui';
-import { debugCacheKey, debugScoringSettings } from '../lib/debug';
-import { clearCache } from '../lib/cache';
-import { decide } from '../lib/mode';
-import { logAutoAction, type AutoActionEntry } from '../lib/action-log';
 import {
-  MELTDOWN_MS,
-  isHandled,
-  markHandled,
-  pauseAutoActions,
-  reserveAutoAction,
-} from '../lib/auto-guard';
+  alreadyMounted,
+  announce,
+  clearMounted,
+  mountCard,
+  mountDiagnostic,
+  type CardView,
+} from '../lib/ui';
+import { decide, effectiveMode, userRule, type Decision, type Presentation } from '../lib/mode';
+import { diagnosticLabel } from '../lib/debug';
+import { createDiagnostics, outcomeCode } from '../lib/diagnostics';
+import { createReaderProtection } from '../lib/reader-protection';
+import { isTarget, recognitionContext, type Recognition } from '../lib/recognition';
 import { uiT } from '../lib/i18n-ui';
-import type { DecisionResult, PostExtract, Settings } from '../lib/types';
+import type { Settings } from '../lib/types';
 
 export default defineContentScript({
   matches: ['https://x.com/*', 'https://twitter.com/*'],
@@ -34,72 +42,92 @@ export default defineContentScript({
   },
 });
 
+/**
+ * - `auto`: observers, needs auto-scan, only near the viewport.
+ * - `manual`: the popup's "Scan current page"; sends even with auto-scan off.
+ * - `refresh`: a settings change; re-renders from what is known, never sends.
+ */
+type Trigger = 'auto' | 'manual' | 'refresh';
+
+/** What one article node shows (or, in shadow mode, recorded) and why. */
+interface NodeRecord {
+  renderKey: string;
+  fingerprint: string;
+  identity: string;
+  postId: string;
+  result: Recognition;
+  /** True when the result came back from the background, not from local admission. */
+  transported: boolean;
+  /** Signature of what is mounted; '' when the post is untouched. */
+  mounted: string;
+}
+
+/** Automatic requests pause this long after the provider answers 429. */
+const RATE_LIMIT_PAUSE_MS = 60_000;
+
 async function boot() {
   let settings = await loadSettings();
   const t = uiT();
   // One limiter for the whole session; changing the cap never splits the queue.
   const limiter = createLimiter(settings.maxConcurrency);
-  /**
-   * Per-node dedupe plus the generation that rejects scores computed under
-   * settings the user has since changed (see lib/scan-state.ts).
-   */
+  /** Per-node dedupe and the generations that reject stale results (lib/scan-state.ts). */
   const scan = createScanState();
-  /** Debug badges only: lets a threshold change recolour without re-scoring. */
-  const debugScores = new WeakMap<HTMLElement, { postId: string; result: DecisionResult }>();
+  /** Page-owned recognition cache, keyed by request identity. */
+  const recognizer = createRecognizer();
+  /** Per-tab, in-memory record for the popup. Nothing is persisted. */
+  const diagnostics = createDiagnostics();
+  const reading = createReaderProtection();
+  let records = new WeakMap<HTMLElement, NodeRecord>();
+  /** Identities the user reported as inaccurate in this tab. */
+  const disputed = new Set<string>();
+  /** Bumped by every settings change, so automatic scans re-evaluate every node once. */
+  let settingsRevision = 0;
+  let settingsLoadRevision = 0;
+  let pausedUntil = 0;
+  let pauseReason: 'rate_limited' | 'authentication' | null = null;
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    // Other local keys (the action log, auto-guard state) change all the time;
-    // reacting to them would throw away scores for an unchanged policy.
+    // Other local keys (action log, auto-guard state) change all the time;
+    // only the settings key can change what is sent or shown.
     if (area !== 'local' || !changes[settingsKey()]) return;
-    void loadSettings().then((s) => {
-      const prev = settings;
-      const debugToggled = s.debugMode !== prev.debugMode;
-      const scoringChanged = scoringSettingsChanged(prev, s);
-      const presentationChanged = s.scanMode !== prev.scanMode || s.scanScope !== prev.scanScope;
-      const enabledChanged = s.enabled !== prev.enabled;
-      const thresholdChanged = s.threshold !== prev.threshold;
-
-      settings = s;
-      if (s.maxConcurrency !== prev.maxConcurrency) limiter.setMax(s.maxConcurrency);
-
-      // Invalidate first, unconditionally: a single save can change the model
-      // *and* flip debug mode, and both caches must react to it.
-      if (scoringChanged) clearCache();
-      if (debugToggled) clearCache('debug:');
-      if (scoringChanged || presentationChanged || debugToggled || enabledChanged) scan.invalidate();
-
-      if (!s.enabled) {
-        unmountAll();
-        return;
-      }
-
-      if (scoringChanged || presentationChanged || debugToggled || enabledChanged) {
-        // Mode and scope edits reuse scores, but old cards and in-flight work
-        // must not survive a change in what the popup says will be displayed.
-        // With automatic scans off, clear the old UI and wait for a manual scan.
-        if (s.debugMode || s.autoScan) {
-          unmountAll();
-          void scanVisible(s.debugMode);
-        } else if (debugToggled || presentationChanged) {
-          unmountAll();
-        }
-        return;
-      }
-
-      // Display-only edit: the debug bands are relative to the threshold, so
-      // recolour the badges from the scores we already have instead of paying
-      // for another model call.
-      if (s.debugMode && thresholdChanged) {
-        for (const el of document.querySelectorAll<HTMLElement>('[data-anti-slop]')) {
-          const scored = debugScores.get(el);
-          // The same identity check the async path makes: X recycles nodes.
-          if (!scored || !el.isConnected) continue;
-          if (extractTweet(el)?.id !== scored.postId) continue;
-          mountDebugBadge(el, scored.result, s.threshold, t, scored.postId);
-        }
-      }
-    });
+    void resync();
   });
+  await resync();
+
+  function applySettings(next: Settings): void {
+    const prev = settings;
+    settings = next;
+    settingsRevision++;
+    if (next.maxConcurrency !== prev.maxConcurrency) limiter.setMax(next.maxConcurrency);
+
+    if (!next.enabled) {
+      scan.invalidate();
+      unmountAll();
+      return;
+    }
+    if (recognitionSettingsChanged(prev, next) || !prev.enabled) {
+      // Results for another endpoint, model or key never apply to this one.
+      scan.invalidate();
+      recognizer.clear();
+      pausedUntil = 0;
+      pauseReason = null;
+    } else if (shouldScan(prev, false) && !shouldScan(next, false)) {
+      // Automatic work in flight must not land; manual scans keep going.
+      scan.invalidateAutomatic();
+      recognizer.invalidatePending();
+    }
+    // Mode, debug, scope, rules and no-send preferences only change admission
+    // or presentation: re-render from known results without any request.
+    refreshAll();
+    if (shouldScan(next, false)) void scanVisible(false);
+  }
+
+  /** The background saw other settings than this page: catch up, but never loop. */
+  async function resync(): Promise<void> {
+    const revision = ++settingsLoadRevision;
+    const fresh = await loadSettings();
+    if (revision === settingsLoadRevision && JSON.stringify(fresh) !== JSON.stringify(settings)) applySettings(fresh);
+  }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'ANTI_SLOP_UNBLOCK') {
@@ -114,252 +142,358 @@ async function boot() {
         .catch((e: unknown) => sendResponse({ ok: false, error: String(e) }));
       return true;
     }
+    if (msg?.type === 'ANTI_SLOP_DIAGNOSTICS') {
+      sendResponse({
+        ok: true,
+        diagnostics: diagnostics.snapshot(),
+        pause: pausedUntil > Date.now() ? pauseReason : null,
+      });
+      return false;
+    }
     return false;
   });
 
-  async function toExtract(el: HTMLElement): Promise<PostExtract | null> {
-    const tweet = extractTweet(el);
-    if (!tweet) return null;
-    const me = currentUserHandle();
-    // Debug scores everything; the replies-only scope only saves model calls.
-    if (settings.scanScope === 'replies-only' && !tweet.isReply && !settings.debugMode) {
-      // On a status page, still score replies; skip original / timeline roots
-      const statusId = location.pathname.match(/\/status\/(\d+)/)?.[1];
-      if (!statusId || tweet.id === statusId) return null;
-    }
-    return {
-      id: tweet.id,
-      handle: tweet.handle,
-      text: tweet.text,
-      isReply: tweet.isReply,
-      parentText: parentTextFor(el, tweet),
-      createdAtMs: tweet.createdAtMs,
-      parentCreatedAtMs: parentCreatedAtMs(el, tweet),
-      userId: tweet.userId,
-      isOwn: me != null && me.toLowerCase() === tweet.handle.toLowerCase(),
-    };
+  function renderKeyOf(snapshot: PostSnapshot): string {
+    // Same id with other text or context (edits, a quote that finished
+    // loading, a recycled node) is a different render.
+    return JSON.stringify({ post: snapshot.post, input: snapshot.input });
   }
 
-  /** Returns true when the post was actually scored and rendered. */
-  async function handleArticle(el: HTMLElement, force = false): Promise<boolean> {
-    if (!settings.enabled) return false;
-    // Debug is a full-page read: score every mounted post, not just the
-    // scrolled-past slice the normal viewport scheduling covers.
-    if (!force && !settings.debugMode && !isInViewport(el)) return false;
+  function processedKey(renderKey: string): string {
+    return `${settingsRevision}\n${renderKey}`;
+  }
 
-    const post = await toExtract(el);
-    if (!post) return false;
-    if (!force && (scan.isProcessed(el, post.id) || alreadyMounted(el, post.id))) return false;
-    // Mounting a badge is itself a DOM mutation, so a scan can run again before
-    // the previous score returns. Never submit the same post twice.
-    const ticket = scan.begin(el, post.id);
+  function local(snapshot: PostSnapshot): Recognition | null {
+    return admission({ isOwn: snapshot.post.isOwn, input: snapshot.input }, settings, userRule(snapshot.post, settings));
+  }
+
+  /** The node still shows exactly this snapshot, in scope. */
+  function liveMatches(el: HTMLElement, renderKey: string): boolean {
+    if (!el.isConnected) return false;
+    const live = readSnapshot(el, currentUserHandle());
+    return Boolean(live) && renderKeyOf(live!) === renderKey &&
+      inScope(live!.post, settings.scanScope, location.pathname);
+  }
+
+  /** Right before transport: the request is still wanted under the current settings. */
+  function sendable(el: HTMLElement, ticket: ScanTicket, renderKey: string, fingerprint: string, snapshot: PostSnapshot): boolean {
+    if (!scan.owns(el, ticket) || !shouldScan(settings, ticket.force)) return false;
+    if (!ticket.force && Date.now() < pausedUntil) return false;
+    if (requestFingerprint(settings) !== fingerprint || local(snapshot)) return false;
+    return liveMatches(el, renderKey);
+  }
+
+  /** Before a cache or log write: the answer still belongs to the current request. */
+  function stillCurrent(el: HTMLElement, ticket: ScanTicket, renderKey: string, fingerprint: string, snapshot: PostSnapshot): boolean {
+    return scan.owns(el, ticket) && shouldScan(settings, ticket.force) &&
+      requestFingerprint(settings) === fingerprint && !local(snapshot) && liveMatches(el, renderKey);
+  }
+
+  /** Before mounting: this registration still owns the node and the node is unchanged. */
+  function stillMountable(el: HTMLElement, ticket: ScanTicket, renderKey: string, fingerprint: string): boolean {
+    return scan.owns(el, ticket) && shouldScan(settings, ticket.force) &&
+      requestFingerprint(settings) === fingerprint && liveMatches(el, renderKey);
+  }
+
+  function notePause(result: Recognition): void {
+    if (result.status !== 'failed') return;
+    const manual = effectiveMode(settings.scanMode) === 'manual';
+    if (result.error === 'rate_limited') {
+      const wasPaused = Date.now() < pausedUntil;
+      pausedUntil = Math.max(pausedUntil, Date.now() + RATE_LIMIT_PAUSE_MS);
+      pauseReason = pauseReason === 'authentication' ? pauseReason : 'rate_limited';
+      if (!wasPaused && manual) toast(t('rateLimitedPause'));
+    } else if (result.error === 'authentication') {
+      const wasPaused = pauseReason === 'authentication';
+      pausedUntil = Number.POSITIVE_INFINITY;
+      pauseReason = 'authentication';
+      if (!wasPaused && manual) toast(t('authPause'));
+    }
+  }
+
+  /** Returns true when the post reached a decision (shown or, in shadow, recorded). */
+  async function processArticle(el: HTMLElement, trigger: Trigger): Promise<boolean> {
+    const force = trigger !== 'auto';
+    if (!shouldScan(settings, force)) return false;
+    if (trigger === 'auto' && !isInViewport(el)) return false;
+
+    const snapshot = readSnapshot(el, currentUserHandle());
+    if (!snapshot || !inScope(snapshot.post, settings.scanScope, location.pathname)) {
+      forget(el);
+      return false;
+    }
+    if (isInViewport(el, 0)) reading.enter(snapshot.post.id, Date.now());
+
+    const renderKey = renderKeyOf(snapshot);
+    if (trigger === 'auto' && scan.isProcessed(el, processedKey(renderKey))) return false;
+    const fingerprint = requestFingerprint(settings);
+    const identity = recognitionIdentity(snapshot.input, fingerprint);
+
+    let result: Recognition | undefined = local(snapshot) ?? undefined;
+    let transported = false;
+    if (!result) {
+      const cached = recognizer.get(identity);
+      const known = records.get(el);
+      if (cached) {
+        result = cached;
+        transported = true;
+      } else if (trigger === 'refresh' && known?.transported && known.renderKey === renderKey && known.fingerprint === fingerprint) {
+        // A failure shown before a display change is shown again, not retried.
+        result = known.result;
+        transported = true;
+      }
+    }
+    if (!result && trigger === 'refresh') {
+      forget(el);
+      return false;
+    }
+    if (!result && trigger === 'auto' && Date.now() < pausedUntil) return false;
+
+    // Mounting a card is itself a DOM mutation, so a scan can run again before
+    // the previous answer returns. Never submit the same render twice.
+    const ticket = scan.begin(el, renderKey, force);
     if (!ticket) return false;
-
-    const debug = settings.debugMode;
-    const scoringSettings = debug ? debugScoringSettings(settings) : settings;
-    const options = {
-      shouldCache: () => scan.isCurrent(ticket),
-      ...(debug ? { cacheKey: debugCacheKey(post.id) } : {}),
-    };
-
-    let result: DecisionResult | null;
     try {
-      result = await limiter.run(async () => {
-        // The task may have waited in the queue while the settings changed,
-        // or the extension was switched off.
-        if (!settings.enabled || !scan.isCurrent(ticket)) return null;
-        return scorePost(post, scoringSettings, options);
-      });
+      if (!result) {
+        const reply = await limiter.run(async () => {
+          // The task may have waited in the queue while settings or the node changed.
+          if (!sendable(el, ticket, renderKey, fingerprint, snapshot)) return null;
+          return recognizer.run(identity, () => sendRecognition(snapshot.input, fingerprint, {
+            handle: snapshot.post.handle,
+            isOwn: snapshot.post.isOwn,
+            replyScoped: inScope(snapshot.post, 'replies-only', location.pathname),
+            automatic: !ticket.force,
+          }));
+        });
+        if (!reply) return false;
+        if (reply.ok && reply.transport) diagnostics.recordTransport(reply.transport);
+        if (!reply.ok && reply.reason === 'stale') {
+          void resync();
+          return false;
+        }
+        // Settings changed mid-flight: this answer describes a request that is gone.
+        if (!stillCurrent(el, ticket, renderKey, fingerprint, snapshot)) return false;
+        result = reply.ok ? reply.result : { status: 'failed', error: 'internal', context: recognitionContext(snapshot.input) };
+        transported = true;
+        notePause(result);
+        recognizer.store(identity, result);
+      }
+      // X recycles article nodes: never render post A's answer on post B.
+      if (!stillMountable(el, ticket, renderKey, fingerprint)) return false;
+      present(el, snapshot, { renderKey, fingerprint, identity, result, transported });
+      scan.commit(el, processedKey(renderKey));
+      return true;
     } finally {
       scan.end(el, ticket);
     }
+  }
 
-    // Settings changed mid-flight: this score describes a policy that is gone.
-    if (!result || !scan.isCurrent(ticket) || !settings.enabled) return false;
-    // X recycles article nodes; never render post A's score on post B.
-    if (!el.isConnected || extractTweet(el)?.id !== post.id) return false;
-    scan.commit(el, post.id);
+  function present(
+    el: HTMLElement,
+    snapshot: PostSnapshot,
+    known: Pick<NodeRecord, 'renderKey' | 'fingerprint' | 'identity' | 'result' | 'transported'>,
+  ): void {
+    const { result, identity } = known;
+    const postId = snapshot.post.id;
+    const rule = userRule(snapshot.post, settings);
+    const decision = decide(result, settings, rule, { disputed: disputed.has(`${postId}\n${identity}`) });
+    let presentation: Presentation = decision.presentation;
+    const now = Date.now();
+    if (isInViewport(el, 0)) reading.enter(postId, now);
+    const readerProtected = presentation === 'fold' && reading.protects(postId, now);
+    if (readerProtected) presentation = 'advisory';
 
-    if (debug) {
-      // Read-only: no decide(), so no fold and no automatic block.
-      debugScores.set(el, { postId: post.id, result });
-      mountDebugBadge(el, result, settings.threshold, t, post.id);
-      return true;
+    diagnostics.record(postId, {
+      status: result.status,
+      code: outcomeCode(result),
+      mode: effectiveMode(settings.scanMode),
+      presentation,
+      counterfactual: decision.counterfactual,
+      decision: decision.reason,
+      rule,
+      context: result.context,
+    });
+
+    const signature = presentation === 'none' ? '' :
+      `${known.renderKey}\n${known.fingerprint}\n${presentation}\n${decision.reason}\n${JSON.stringify(result)}\n${readerProtected}`;
+    const previous = records.get(el);
+    records.set(el, { ...known, postId, mounted: signature });
+    if (presentation === 'none') {
+      if (alreadyMounted(el)) clearMounted(el);
+      return;
     }
+    // Unchanged: keep whatever the user did with the card (folded or shown).
+    if (previous?.mounted === signature && alreadyMounted(el, postId)) return;
+    if (presentation === 'diagnostic') {
+      mountDiagnostic(el, diagnosticLabel(result, t), t, postId);
+      return;
+    }
+    mountCard(el, cardView(snapshot, result, decision, presentation, readerProtected), handlersFor(el, snapshot, identity, result), t, postId);
+  }
 
-    const decision = decide(result, settings);
-    if (decision.presentation === 'none') return false;
+  function cardView(
+    snapshot: PostSnapshot,
+    result: Recognition,
+    decision: Decision,
+    presentation: 'advisory' | 'fold',
+    readerProtected: boolean,
+  ): CardView {
+    if (decision.reason === 'user_hide') {
+      return {
+        presentation,
+        kind: 'rule',
+        title: readerProtected ? t('ruleHiddenVisible') : t('ruleHidden'),
+        evidence: [],
+        counterevidence: [],
+        handle: snapshot.post.handle,
+      };
+    }
+    const target = isTarget(result) ? result : null;
+    return {
+      presentation: 'advisory',
+      kind: 'model',
+      title: target ? t(`cat_${target.category}`) : '',
+      category: target?.category,
+      evidence: target?.evidence ?? [],
+      counterevidence: target?.counterevidence ?? [],
+      rationale: target?.reason,
+      handle: snapshot.post.handle,
+    };
+  }
 
-    mountResult(el, result, decision.presentation, {
-      onExpand: () => {},
+  function handlersFor(el: HTMLElement, snapshot: PostSnapshot, identity: string, result: Recognition) {
+    const { id: postId, handle } = snapshot.post;
+    return {
+      // Shown once by the user: a later re-render must not fold it again.
+      onToggle: (collapsed: boolean) => {
+        if (!collapsed) reading.markSeen(postId);
+      },
+      // Report: local and per tab. No rule changes, nothing sent.
+      onReport: () => {
+        if (!isTarget(result)) return;
+        disputed.add(`${postId}\n${identity}`);
+        diagnostics.report(result.category);
+        const record = records.get(el);
+        if (record && record.identity === identity && liveMatches(el, record.renderKey)) present(el, snapshot, record);
+        toast(t('reported'));
+      },
+      // Permanent keep: the background adds the account to the keep list;
+      // the settings change then re-renders every post by that account.
+      onKeep: () => {
+        void chrome.runtime.sendMessage({ type: 'ANTI_SLOP_KEEP_ACCOUNT', handle })
+          .then((reply: { ok?: boolean } | undefined) => {
+            if (reply?.ok) toast(`${t('kept')}: @${handle}`);
+            else announce(el, t('keepFail'));
+          })
+          .catch(() => announce(el, t('keepFail')));
+      },
       onMute: () => {
-        void muteUser({ article: el, screenName: post.handle, userId: post.userId }).then((r) => {
+        void muteUser({ article: el, screenName: handle, userId: null }).then((r) => {
           toast(r.ok ? t('muteOk') : `${t('actionFail')}: ${r.detail || r.method}`);
         });
       },
       onBlock: () => {
-        void blockUser({ article: el, screenName: post.handle, userId: post.userId }).then((r) => {
+        void blockUser({ article: el, screenName: handle, userId: null }).then((r) => {
           toast(r.ok ? t('blockOk') : `${t('actionFail')}: ${r.detail || r.method}`);
         });
       },
-    }, t, post.id);
-
-    if (decision.autoBlock) scheduleAutoBlock(post, result.score);
-    return true;
+    };
   }
 
-  /**
-   * Serialised auto block for strict mode.
-   *
-   * The queue can outlive the settings that filled it, so every item is
-   * re-validated at dequeue time. Limits (interval, daily cap, meltdown) live
-   * in auto-guard and span tabs and reloads; the durable ledger keys on userId
-   * when we know it. Native-menu automation is never used here: it opens
-   * popups and races with the user.
-   */
-  let autoQueue: Promise<void> = Promise.resolve();
-  const autoSeen = new Set<string>();
-
-  function skippedByPolicy(post: PostExtract): boolean {
-    const handle = (post.handle || '').replace(/^@/, '').toLowerCase();
-    if (
-      settings.accountWhitelist.some(
-        (h) => h.replace(/^@/, '').toLowerCase() === handle,
-      )
-    ) {
-      return true;
-    }
-    return settings.skipOwnPosts && Boolean(post.isOwn);
+  /** Drop what this node showed: it holds another post now, or none in scope. */
+  function forget(el: HTMLElement): void {
+    records.delete(el);
+    scan.forget(el);
+    if (alreadyMounted(el)) clearMounted(el);
   }
 
-  function logAction(entry: AutoActionEntry): void {
-    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      // The service worker writes serially; direct writes can race across tabs.
-      chrome.runtime.sendMessage({ type: 'ANTI_SLOP_LOG_ACTION', entry }).catch(() => {
-        void logAutoAction(entry);
-      });
-      return;
-    }
-    void logAutoAction(entry);
+  function unmountAll(): void {
+    document.querySelectorAll<HTMLElement>('[data-anti-slop]').forEach((el) => clearMounted(el));
+    records = new WeakMap();
   }
 
-  function scheduleAutoBlock(post: PostExtract, score: number): void {
-    const key = (post.userId || post.handle || '').toLowerCase();
-    if (!key || autoSeen.has(key)) return;
-    autoSeen.add(key);
-
-    autoQueue = autoQueue.then(async () => {
-      const now = Date.now();
-      // Re-check the world: the user may have changed mode or disabled us.
-      if (!settings.enabled || settings.debugMode || settings.scanMode !== 'strict') return;
-      if (skippedByPolicy(post)) return;
-      if (await isHandled(key, now)) return;
-
-      const reserved = await reserveAutoAction(now);
-      if (!reserved.ok) {
-        if (reserved.verdict.reason !== 'paused') {
-          void logAutoAction({
-            ts: now,
-            action: 'block',
-            handle: post.handle,
-            postId: post.id,
-            score,
-            ok: false,
-            detail: `skipped:${reserved.verdict.reason}`,
-          });
-        }
-        return;
-      }
-
-      // Two storage round trips ran since the dequeue check; re-read the mode
-      // right before the destructive call (TLA+ model: CallOnlyInStrict).
-      if (!settings.enabled || settings.debugMode || settings.scanMode !== 'strict') return;
-
-      const r = await blockUser({
-        screenName: post.handle,
-        userId: post.userId,
-        preferApi: true,
-      });
-
-      if (r.ok) await markHandled(key, now);
-      else if (r.status === 403 || r.status === 429) {
-        // X is pushing back: stop automatic actions instead of retrying into it.
-        await pauseAutoActions(now + MELTDOWN_MS);
-        toast(t('autoPaused'));
-      }
-
-      logAction({
-        ts: now,
-        action: 'block',
-        handle: post.handle,
-        postId: post.id,
-        score,
-        ok: r.ok,
-        detail: r.ok ? undefined : r.detail || r.method,
-      });
-      toast(
-        r.ok ? `${t('autoBlocked')} @${post.handle}` : `${t('actionFail')}: ${r.detail || r.method}`,
-      );
-    });
+  /** Re-render every post from known results after a settings change. Sends nothing. */
+  function refreshAll(): void {
+    for (const el of listArticles()) void processArticle(el, 'refresh');
   }
 
-  /** Returns how many posts were actually scored, so the popup can report it. */
+  /** Returns how many posts reached a decision, so the popup can report it. */
   async function scanVisible(force = false): Promise<number> {
-    if (!settings.enabled) return 0;
-    if (!settings.autoScan && !force && !settings.debugMode) return 0;
-    const results = await Promise.all(listTweets().map((tweet) => handleArticle(tweet.el, force)));
+    if (!shouldScan(settings, force)) return 0;
+    const results = await Promise.all(listArticles().map((el) => processArticle(el, force ? 'manual' : 'auto')));
     return results.filter(Boolean).length;
   }
 
   const mo = new MutationObserver(() => {
-    if (settings.autoScan || settings.debugMode) void scanVisible(false);
+    for (const el of listArticles()) {
+      const record = records.get(el);
+      if (record?.mounted && !alreadyMounted(el, record.postId)) scan.forget(el);
+    }
+    if (shouldScan(settings, false)) void scanVisible(false);
   });
   mo.observe(document.body, { childList: true, subtree: true });
 
-  // Viewport trigger
+  // Viewport trigger for automatic scans.
   const io = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
         if (e.isIntersecting && e.target instanceof HTMLElement) {
-          void handleArticle(e.target, false);
+          void processArticle(e.target, 'auto');
         }
       }
     },
     { root: null, rootMargin: '100px', threshold: 0.05 },
   );
 
+  // Reading bookkeeping for reader protection (no margin: actually on screen).
+  const visibility = new IntersectionObserver(
+    (entries) => {
+      const now = Date.now();
+      for (const e of entries) {
+        const id = postIdOf(e.target);
+        if (!id) continue;
+        if (e.isIntersecting) reading.enter(id, now);
+        else reading.leave(id, now);
+      }
+    },
+    { root: null, rootMargin: '0px', threshold: 0.2 },
+  );
+
+  const observed = new Set<HTMLElement>();
   const watch = () => {
-    for (const tweet of listTweets()) {
-      io.observe(tweet.el);
+    for (const el of observed) {
+      if (el.isConnected) continue;
+      io.unobserve(el);
+      visibility.unobserve(el);
+      observed.delete(el);
+    }
+    for (const el of listArticles()) {
+      if (observed.has(el)) continue;
+      io.observe(el);
+      visibility.observe(el);
+      observed.add(el);
     }
   };
   watch();
   setInterval(watch, 2000);
 
-  if (settings.autoScan || settings.debugMode) void scanVisible(false);
+  if (shouldScan(settings, false)) void scanVisible(false);
 
-  // Expose for manual debug
+  // Manual scan hook for the extension console; same gates as the popup.
   (globalThis as unknown as { __antiSlopScan?: () => void }).__antiSlopScan = () => {
-    for (const tweet of listTweets()) clearMounted(tweet.el);
     void scanVisible(true);
   };
 }
 
-/** Restore every article this script has touched (folded or badged). */
-function unmountAll(): void {
-  document
-    .querySelectorAll<HTMLElement>('[data-anti-slop]')
-    .forEach((el) => clearMounted(el));
-}
-
-function isInViewport(el: Element): boolean {
+function isInViewport(el: Element, margin = 120): boolean {
   const r = el.getBoundingClientRect();
-  return r.bottom > 0 && r.top < (window.innerHeight || 800) + 120;
+  return r.bottom > 0 && r.top < (window.innerHeight || 800) + margin;
 }
 
 function toast(msg: string) {
   const n = document.createElement('div');
   n.textContent = msg;
+  n.setAttribute('role', 'status');
   Object.assign(n.style, {
     position: 'fixed',
     bottom: '24px',

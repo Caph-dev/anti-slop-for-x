@@ -146,6 +146,9 @@ select:disabled { color: var(--muted); border-color: var(--border); }
 .activity li.fail .entry-detail { color: var(--warn); }
 .act { flex: none; min-height: 28px; padding: 3px 10px; border: 1px solid var(--control); border-radius: var(--control-radius); color: var(--fg); background: var(--bg); font-size: 12px; }
 .act:disabled, .done { color: var(--muted); font-size: 11px; }
+.diag-hint { margin: 0 0 8px; font-size: 11px; }
+.activity li .diag-count { flex: none; font-variant-numeric: tabular-nums; }
+.connection-detail.warn { color: var(--warn); }
 .undo-note { margin: 8px 0 0; }
 .undo-note:empty { display: none; }
 

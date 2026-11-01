@@ -1,114 +1,65 @@
 /**
- * Debug mode: a read-only AI rate on every post in the page.
+ * Debug mode: a per-post diagnostic of the recognition state.
  *
- * Debug is diagnostic, so it must not change what the normal pipeline does:
- * - the scoring settings bypass the noise skips (short text / own posts /
- *   whitelist), otherwise every one of them would show a skipped `0%` instead
- *   of the number the detector actually computed;
- * - results go to their own cache namespace, so a debug score can never be read
- *   back by the fold path (a whitelisted account must stay out of reach);
- * - nothing is folded or blocked while debug is on (enforced in the content
- *   script, which never reaches `decide()` in debug mode).
+ * Debug changes how results are shown and overrides auto-scan. It obeys enable,
+ * scope, no-send preferences and explicit rules. In shadow mode there are no
+ * badges: shadow never changes a post, and its record is in the popup instead.
  */
-import type { DecisionResult, Settings } from './types';
+import { RECOGNITION_SOURCES, isTarget, type ContextState, type Recognition, type RecognitionSource } from './recognition';
 
-export type DebugLevel = 'low' | 'mid' | 'high';
+export type DiagnosticLevel = 'target' | 'normal' | 'neutral' | 'problem';
 
-export type DebugSourceKey =
-  | 'srcModel'
-  | 'srcPrefilter'
-  | 'srcCache'
-  | 'srcSkipped'
-  | 'srcError';
-
-export interface DebugLabel {
-  /** Final score, the one the normal policy acts on. */
-  pct: number;
-  /** Decision-model score before the blend; null when the model did not run. */
-  modelPct: number | null;
-  /** Mirrors the normal policy bands: high would fold, mid is borderline. */
-  level: DebugLevel;
-  /** Where the number came from; kept for the tooltip and the dataset. */
-  sourceKey: DebugSourceKey;
-  /**
-   * The model is the default producer, so naming it adds nothing to the common
-   * case. Prefilter, cache and failure are worth showing: they say the number
-   * is not a fresh model judgement.
-   */
-  showSource: boolean;
-  /** Hover text: the decision reason plus the prefilter hits that fired. */
+export interface DiagnosticLabel {
+  level: DiagnosticLevel;
+  /** Short badge text, from fixed strings only. */
+  text: string;
+  /** Hover text: context state of each source. */
   detail: string;
+  status: Recognition['status'];
 }
 
-/** Settings used only to *score* in debug mode; never written back or acted on. */
-export function debugScoringSettings(settings: Settings): Settings {
-  return {
-    ...settings,
-    skipShortText: false,
-    skipOwnPosts: false,
-    accountWhitelist: [],
-  };
+function fill(template: string, source: string): string {
+  return template.replace('{source}', source);
 }
 
-/** Debug results live apart from the normal cache, in both directions. */
-export function debugCacheKey(postId: string): string {
-  return `debug:${postId}`;
+function missingText(missing: RecognitionSource[], context: ContextState, t: (key: string) => string): string {
+  return missing
+    .map((source) => fill(t(context[source] === 'partial' ? 'incomplete' : 'missingSource'), t(`src_${source}`)))
+    .join(', ');
 }
 
-export function debugSourceKey(
-  result: Pick<DecisionResult, 'source' | 'reason'>,
-): DebugSourceKey {
-  if (result.source === 'model') return 'srcModel';
-  if (result.source === 'cache') return 'srcCache';
-  if (result.source === 'skipped') return 'srcSkipped';
-  return /^model-error/.test(result.reason || '') ? 'srcError' : 'srcPrefilter';
+export function contextDetail(context: ContextState, t: (key: string) => string): string {
+  return RECOGNITION_SOURCES.map((source) => `${t(`src_${source}`)}: ${t(`ctx_${context[source]}`)}`).join(' · ');
 }
 
-export function debugScoreLabel(
-  result: Pick<DecisionResult, 'score' | 'modelScore' | 'source' | 'reason' | 'prefilter'>,
-  threshold: number,
-): DebugLabel {
-  const score = clamp01(result.score);
-  const level: DebugLevel =
-    score >= threshold ? 'high' : score >= threshold * 0.7 ? 'mid' : 'low';
-
-  const hits = result.prefilter?.hits ?? [];
-  const detail = [
-    result.reason || '',
-    hits.length
-      ? `prefilter: ${hits
-          .map((h) => `${h.id}${h.detail ? ` (${h.detail})` : ''}`)
-          .join(', ')}`
-      : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  const sourceKey = debugSourceKey(result);
-  return {
-    pct: Math.round(score * 100),
-    modelPct: typeof result.modelScore === 'number' ? Math.round(clamp01(result.modelScore) * 100) : null,
-    level,
-    sourceKey,
-    showSource: sourceKey !== 'srcModel',
-    detail,
-  };
+export function diagnosticLabel(result: Recognition, t: (key: string) => string): DiagnosticLabel {
+  const detail = contextDetail(result.context, t);
+  switch (result.status) {
+    case 'classified':
+      return {
+        level: isTarget(result) ? 'target' : 'normal',
+        text: result.category === 'normal' ? t('cat_normal') : t(`dbg_${result.category}`),
+        detail: `${detail}\n${t('modelNote')}`,
+        status: result.status,
+      };
+    case 'abstained':
+      return {
+        level: 'neutral',
+        text: `${t('stAbstained')} · ${result.cause === 'model' ? t('modelUnsure') : missingText(result.missing, result.context, t)}`,
+        detail,
+        status: result.status,
+      };
+    case 'unavailable':
+      return { level: 'neutral', text: `${t('stNotSent')} · ${t(`r_${result.reason}`)}`, detail, status: result.status };
+    case 'failed':
+      return { level: 'problem', text: `${t('stFailed')} · ${t(`e_${result.error}`)}`, detail, status: result.status };
+  }
 }
 
-function clamp01(n: number): number {
-  return Math.max(0, Math.min(1, n));
-}
-
-/**
- * `AI 56% | 47%`: the decision-model score first, then the final blended score
- * the policy acts on. A prefilter-only result has no model number, shown as
- * `–` rather than pretending the prefilter score came from the model.
- */
-export function debugBadgeText(
-  label: Pick<DebugLabel, 'pct' | 'modelPct' | 'showSource' | 'sourceKey'>,
-  t: (key: string) => string,
-): string {
-  const model = label.modelPct == null ? '–' : `${label.modelPct}%`;
-  const source = label.showSource ? ` · ${t(label.sourceKey)}` : '';
-  return `AI ${model} | ${label.pct}%${source}`;
+/** Label for a diagnostics outcome code (`status` + `code`), for the popup. */
+export function outcomeLabel(status: string, code: string, t: (key: string) => string): string {
+  if (status === 'classified') return code === 'normal' ? t('cat_normal') : t(`dbg_${code}`);
+  if (status === 'abstained') return `${t('stAbstained')} · ${code === 'model' ? t('modelUnsure') : t('missingContext')}`;
+  if (status === 'unavailable') return `${t('stNotSent')} · ${t(`r_${code}`)}`;
+  return `${t('stFailed')} · ${t(`e_${code}`)}`;
 }

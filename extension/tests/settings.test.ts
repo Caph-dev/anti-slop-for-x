@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   loadSettings,
+  recognitionSettingsChanged,
   saveSettings,
-  scoringSettingsChanged,
   settingsKey,
 } from '../lib/settings';
-import { DEFAULT_SETTINGS } from '../lib/types';
+import { DEFAULT_SETTINGS, type Settings } from '../lib/types';
 import { DEFAULT_PROMPT } from '../lib/prompt';
 import { ENDPOINT_PRESETS, resolveEndpoint } from '../lib/endpoints';
 import { resolveUpstreamPath } from '../lib/adapters';
@@ -43,7 +43,7 @@ describe('settings storage', () => {
     expect(settingsKey()).toBe('antiSlopForXSettings');
   });
 
-  it('migrates slopShieldSettings once without dropping values', async () => {
+  it('reads legacy settings without writing, then migrates them on the next queued save', async () => {
     const store = installChrome({
       slopShieldSettings: { threshold: 0.8, apiKey: 'kept-key', accountWhitelist: ['alice'] },
     });
@@ -54,7 +54,11 @@ describe('settings storage', () => {
     expect(loaded.apiKey).toBe('kept-key');
     expect(loaded.accountWhitelist).toEqual(['alice']);
     expect(loaded.enabled).toBe(DEFAULT_SETTINGS.enabled);
-    expect(store.antiSlopForXSettings).toEqual({
+    expect(store.antiSlopForXSettings).toBeUndefined();
+    expect(store.slopShieldSettings).toBeDefined();
+
+    await saveSettings({});
+    expect(store.antiSlopForXSettings).toMatchObject({
       threshold: 0.8,
       apiKey: 'kept-key',
       accountWhitelist: ['alice'],
@@ -75,8 +79,10 @@ describe('settings storage', () => {
     const loaded = await loadSettings();
 
     expect(loaded.apiKey).toBe('new');
+    expect(store.slopShieldSettings).toEqual({ apiKey: 'old' });
+    await saveSettings({});
     expect(store.slopShieldSettings).toBeUndefined();
-    expect(store.antiSlopForXSettings).toEqual({ apiKey: 'new' });
+    expect(store.antiSlopForXSettings).toMatchObject({ apiKey: 'new' });
   });
 
   it('saves under the new key', async () => {
@@ -102,14 +108,20 @@ describe('settings storage', () => {
     expect(loaded.upstreamBaseUrl).toBe('https://gateway.example.com/v1');
   });
 
-  it('downgrades a stored strict mode while the feature is shelved', async () => {
-    installChrome({ antiSlopForXSettings: { scanMode: 'strict' } });
+  it('reads stored strict and auto-fold modes as shadow while folding is unavailable', async () => {
+    for (const stored of ['strict', 'auto-fold'] as const) {
+      const store = installChrome({ antiSlopForXSettings: { scanMode: stored } });
 
-    const loaded = await loadSettings();
+      const loaded = await loadSettings();
 
-    expect(loaded.scanMode).toBe('auto-fold');
-    // The stored value is untouched, so re-enabling the feature restores it.
-    expect((await loadSettings()).scanMode).toBe('auto-fold');
+      expect(loaded.scanMode).toBe('shadow');
+      // The effective mode changes; what is stored does not, so a future
+      // independently reviewed change can restore the user's choice.
+      expect(store.antiSlopForXSettings).toEqual({ scanMode: stored });
+    }
+
+    installChrome({ antiSlopForXSettings: { scanMode: 'manual' } });
+    expect((await loadSettings()).scanMode).toBe('manual');
   });
 
   it('defaults debug mode off, including for settings saved before it existed', async () => {
@@ -223,51 +235,110 @@ describe('settings storage', () => {
     expect(loaded.endpointPreset).toBe('openai-official');
     expect(resolveEndpoint(loaded).path).toBe('/decisions');
   });
+
+  it('never infers the Responses protocol from stored settings', async () => {
+    installChrome({
+      antiSlopForXSettings: {
+        upstreamBaseUrl: 'https://api.openai.com/v1',
+        protocol: 'openai-responses',
+        upstreamPath: '/responses',
+        model: 'test-model',
+      },
+    });
+
+    const loaded = await loadSettings();
+
+    // The (custom) preset is not inferred; the protocol only stays Responses
+    // because the stored legacy fields already said so. Importing an old
+    // settings object never starts a new protocol by itself.
+    expect(loaded.endpointPreset).toBe('custom');
+    expect(resolveEndpoint(loaded).protocol).toBe('openai-responses');
+  });
 });
 
-describe('scoringSettingsChanged', () => {
-  it('ignores display-only edits, including the debug toggle', () => {
-    const next = {
+describe('legacy preferences', () => {
+  it('keeps the pre-0.10 short-text no-send preference for stored settings', async () => {
+    installChrome({ antiSlopForXSettings: { apiKey: 'stored-key' } });
+    expect((await loadSettings()).skipShortText).toBe(true);
+
+    installChrome({});
+    expect((await loadSettings()).skipShortText).toBe(false);
+  });
+
+  it('keeps an explicit short-text choice, including turning it off', async () => {
+    installChrome({ antiSlopForXSettings: { skipShortText: false, shortTextMaxChars: 30 } });
+    const loaded = await loadSettings();
+    expect(loaded.skipShortText).toBe(false);
+    expect(loaded.shortTextMaxChars).toBe(30);
+  });
+
+  it('keeps the legacy threshold stored without using it for recognition', async () => {
+    const store = installChrome({ antiSlopForXSettings: { threshold: 0.9 } });
+
+    expect((await loadSettings()).threshold).toBe(0.9);
+    await saveSettings({ threshold: 0.9 });
+    expect(store.antiSlopForXSettings).toMatchObject({ threshold: 0.9 });
+  });
+
+  it('keeps the model-use opt-out across a save', async () => {
+    installChrome({ antiSlopForXSettings: { prefilterOnly: true } });
+    expect((await loadSettings()).prefilterOnly).toBe(true);
+    expect((await saveSettings({ model: 'test-model' })).prefilterOnly).toBe(true);
+  });
+});
+
+describe('recognition identity guards', () => {
+  it('ignores edits that only change admission or presentation', () => {
+    const next: Settings = {
       ...DEFAULT_SETTINGS,
       enabled: false,
       autoScan: false,
-      scanMode: 'manual' as const,
-      scanScope: 'timeline-and-replies' as const,
+      scanMode: 'manual',
+      scanScope: 'timeline-and-replies',
       threshold: 0.8,
       maxConcurrency: 8,
       debugMode: true,
+      prefilterOnly: true,
+      skipShortText: true,
+      shortTextMaxChars: 20,
+      skipOwnPosts: false,
+      accountWhitelist: ['alice'],
+      accountHideList: ['bob'],
+      defaultPrompt: 'another prompt',
     };
-    expect(scoringSettingsChanged(DEFAULT_SETTINGS, next)).toBe(false);
+    // These are re-evaluated on every render, so they leave the recognition
+    // fingerprint (what a request contains and where it goes) unchanged.
+    expect(recognitionSettingsChanged(DEFAULT_SETTINGS, next)).toBe(false);
+    expect(recognitionSettingsChanged(next, DEFAULT_SETTINGS)).toBe(false);
   });
 
-  it('detects edits that change what scorePost computes', () => {
-    const edits = [
+  it('detects edits that change what a request contains or where it goes', () => {
+    const edits: Array<Partial<Settings>> = [
       { apiKey: 'k' },
+      { credentialRevision: 1 },
       { model: 'other-model' },
-      { protocol: 'openai-decisions' as const },
-      { endpointPreset: 'custom' as const },
+      { protocol: 'openai-decisions' },
+      { endpointPreset: 'custom' },
       { upstreamBaseUrl: 'https://gateway.example.com/v1' },
       { upstreamPath: '/decide' },
-      { defaultPrompt: 'another prompt' },
-      { prefilterOnly: true },
-      { skipShortText: false },
-      { shortTextMaxChars: 20 },
-      { skipOwnPosts: false },
-      { accountWhitelist: ['alice'] },
     ];
     for (const edit of edits) {
-      expect(scoringSettingsChanged(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS, ...edit })).toBe(
-        true,
-      );
+      expect(recognitionSettingsChanged(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS, ...edit })).toBe(true);
+      expect(recognitionSettingsChanged({ ...DEFAULT_SETTINGS, ...edit }, DEFAULT_SETTINGS)).toBe(true);
     }
   });
 
-  it('compares the whitelist as a set of handles', () => {
-    const prev = { ...DEFAULT_SETTINGS, accountWhitelist: ['alice', 'bob'] };
-    const reordered = { ...DEFAULT_SETTINGS, accountWhitelist: ['@Bob', 'ALICE'] };
-    expect(scoringSettingsChanged(prev, reordered)).toBe(false);
-    expect(
-      scoringSettingsChanged(prev, { ...DEFAULT_SETTINGS, accountWhitelist: ['alice'] }),
-    ).toBe(true);
+  it('changes the credential revision only when the key changes', async () => {
+    const store = installChrome({});
+    const first = await saveSettings({ apiKey: 'first-key' });
+    expect(first.credentialRevision).not.toBe(DEFAULT_SETTINGS.credentialRevision);
+
+    expect((await saveSettings({ apiKey: 'first-key' })).credentialRevision).toBe(first.credentialRevision);
+    expect((await saveSettings({ model: 'other-model', debugMode: true })).credentialRevision).toBe(first.credentialRevision);
+
+    const rotated = await saveSettings({ apiKey: 'second-key' });
+    expect(rotated.credentialRevision).not.toBe(first.credentialRevision);
+    expect((store.antiSlopForXSettings as { credentialRevision?: number | string }).credentialRevision).toBe(rotated.credentialRevision);
+    expect((await loadSettings()).credentialRevision).toBe(rotated.credentialRevision);
   });
 });

@@ -1,6 +1,6 @@
 {
   "extName": { "message": "Anti Slop for X" },
   "extDescription": {
-    "message": "Detect and fold AI-slop / bot replies on X. Local prefilter + optional decision model via your Worker proxy."
+    "message": "Marks possible low-quality X replies (engagement bait, off-topic, empty restatement) with quoted evidence. Never auto-blocks."
   }
 }

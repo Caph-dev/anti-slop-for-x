@@ -1,5 +1,60 @@
 import { describe, expect, it } from 'vitest';
-import { createScanState } from '../lib/scan-state';
+import { createScanState, shouldScan } from '../lib/scan-state';
+
+describe('scan scheduling', () => {
+  it.each([
+    [false, false, false, false, false],
+    [false, true, true, true, false],
+    [true, false, false, false, false],
+    [true, false, false, true, true],
+    [true, false, true, false, true],
+    [true, true, false, false, true],
+  ])('enabled=%s autoScan=%s debugMode=%s force=%s -> %s', (enabled, autoScan, debugMode, force, expected) => {
+    expect(shouldScan({ enabled, autoScan, debugMode }, force)).toBe(expected);
+  });
+
+  it('invalidates pending automatic work without discarding completed or manual work', () => {
+    const scan = createScanState();
+    const automaticNode = node();
+    const manualNode = node();
+    const completedNode = node();
+    const automatic = scan.begin(automaticNode, 'auto')!;
+    const manual = scan.begin(manualNode, 'manual', true)!;
+    scan.commit(completedNode, 'done');
+
+    scan.invalidateAutomatic();
+    expect(scan.isCurrent(automatic)).toBe(false);
+    expect(scan.isCurrent(manual)).toBe(true);
+    expect(scan.isProcessed(completedNode, 'done')).toBe(true);
+    expect(scan.begin(manualNode, 'manual', true)).toBeNull();
+    const replacement = scan.begin(automaticNode, 'auto')!;
+    scan.end(automaticNode, automatic);
+    expect(scan.begin(automaticNode, 'auto')).toBeNull();
+    expect(scan.isCurrent(replacement)).toBe(true);
+  });
+
+  it('rechecks queued and in-flight work across autoScan switches', () => {
+    const scan = createScanState();
+    const settings = { enabled: true, autoScan: true, debugMode: false };
+    const queued = scan.begin(node(), 'queued')!;
+    const inFlight = scan.begin(node(), 'in-flight')!;
+    const manual = scan.begin(node(), 'manual', true)!;
+    const allowed = (ticket: typeof queued) => scan.isCurrent(ticket) && shouldScan(settings, ticket.force);
+    expect(allowed(queued)).toBe(true);
+
+    settings.autoScan = false;
+    scan.invalidateAutomatic();
+    expect(allowed(queued)).toBe(false);
+    expect(allowed(inFlight)).toBe(false);
+    expect(allowed(manual)).toBe(true);
+
+    settings.autoScan = true;
+    expect(allowed(inFlight)).toBe(false);
+    expect(allowed(scan.begin(node(), 'new')!)).toBe(true);
+    settings.enabled = false;
+    expect(allowed(manual)).toBe(false);
+  });
+});
 
 const node = (): object => ({});
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));

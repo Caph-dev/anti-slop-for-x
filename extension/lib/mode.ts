@@ -1,66 +1,64 @@
 /**
- * What the extension does with a scored post, per scan mode.
+ * What a recognition does to a post, given the user's settings and rules.
  *
- * Pure decision logic — no DOM, no storage — so the thresholds are testable.
- *
- * - manual:    never hide anything; show the AI rate and let the user act
- * - auto-fold: fold replies at or above the fold threshold (default)
- * - strict:    fold as usual, and block the author above the strict threshold
+ * Pure decision logic, no DOM or storage, so the guarantees are testable:
+ * - nothing a model returns can fold a post. There is no launch switch:
+ *   automatic model folding needs a future, independently reviewed change;
+ * - `shadow` (and the legacy `auto-fold` / `strict` modes) never change a post;
+ * - a keep rule wins every conflict; a hide rule is a local, reversible fold;
+ * - failures, abstentions and unavailable states fail open (nothing shown,
+ *   except a diagnostic badge when debug is on in manual mode).
  */
-import type { DecisionResult, ScanMode, Settings } from './types';
+import { isTarget, type Recognition } from './recognition';
+import type { ScanMode, Settings } from './types';
 
-export type Presentation = 'fold' | 'advisory' | 'badge' | 'none';
+export type UserRule = 'keep' | 'hide' | 'none';
+export type Presentation = 'none' | 'advisory' | 'diagnostic' | 'fold';
+export type DecisionReason =
+  | 'disabled' | 'shadow' | 'automatic_folding_blocked' | 'user_keep' | 'debug'
+  | 'user_hide' | 'manual_review' | 'disputed' | 'normal' | 'fail_open';
+/**
+ * `counterfactual` is what a fold-everything-flagged policy would have done.
+ * Shadow records it; nothing acts on it.
+ */
+export interface Decision { presentation: Presentation; counterfactual: 'keep' | 'fold'; reason: DecisionReason }
 
-export interface Decision {
-  presentation: Presentation;
-  /** True when the author should be blocked automatically (strict mode). */
-  autoBlock: boolean;
+export interface RuleSubject { handle: string; isOwn?: boolean | null }
+
+function sameHandle(list: string[], handle: string): boolean {
+  return list.some((h) => h.replace(/^@/, '').toLowerCase() === handle);
 }
 
-/**
- * Strict mode is shelved until the roadmap issue is resolved. The code path
- * stays in place, but nothing reaches it: `settings.ts` downgrades a stored
- * `strict` value and `decide()` ignores it here as well.
- */
-export const STRICT_ENABLED = false;
-
-/** Strict mode never blocks below this score, whatever the fold threshold is. */
-export const STRICT_BLOCK_MIN_SCORE = 0.9;
-
-export type ModeSettings = Pick<Settings, 'scanMode' | 'threshold'>;
-
-export function strictBlockThreshold(settings: Pick<Settings, 'threshold'>): number {
-  return Math.max(STRICT_BLOCK_MIN_SCORE, settings.threshold);
+export function userRule(post: RuleSubject, settings: Pick<Settings, 'accountWhitelist' | 'accountHideList' | 'skipOwnPosts'>): UserRule {
+  const handle = post.handle.replace(/^@/, '').toLowerCase();
+  if (sameHandle(settings.accountWhitelist, handle) || (settings.skipOwnPosts && post.isOwn !== false)) return 'keep';
+  if (sameHandle(settings.accountHideList, handle)) return 'hide';
+  return 'none';
 }
 
-/**
- * Auto-blocking is destructive and cannot be undone from the extension yet, so
- * it requires evidence from the decision model. Prefilter-only scores, the
- * `prefilterOnly` setting and the model-error fallback produce numbers from
- * local regexes alone — those may fold, never block.
- */
-export function hasModelEvidence(result: Pick<DecisionResult, 'evidence'>): boolean {
-  return result.evidence === 'model';
+/** Legacy automatic modes are read as shadow. */
+export function effectiveMode(mode: ScanMode): 'manual' | 'shadow' {
+  return mode === 'manual' ? 'manual' : 'shadow';
 }
 
 export function decide(
-  result: Pick<DecisionResult, 'score' | 'source' | 'evidence'>,
-  settings: ModeSettings,
+  result: Recognition,
+  settings: Pick<Settings, 'enabled' | 'scanMode' | 'debugMode'>,
+  rule: UserRule,
+  options: { disputed?: boolean } = {},
 ): Decision {
-  if (result.source === 'skipped') return { presentation: 'none', autoBlock: false };
-
-  const score = result.score;
-  const threshold = settings.threshold;
-  const requested: ScanMode = settings.scanMode;
-  const mode: ScanMode = requested === 'strict' && !STRICT_ENABLED ? 'auto-fold' : requested;
-
-  if (mode === 'strict' && score >= strictBlockThreshold(settings)) {
-    return { presentation: 'fold', autoBlock: hasModelEvidence(result) };
-  }
-  if (score >= threshold) {
-    return { presentation: mode === 'manual' ? 'advisory' : 'fold', autoBlock: false };
-  }
-  // Borderline: mark it, never hide it.
-  if (score >= threshold * 0.7) return { presentation: 'badge', autoBlock: false };
-  return { presentation: 'none', autoBlock: false };
+  const target = isTarget(result);
+  const counterfactual = rule === 'none' && target ? 'fold' : 'keep';
+  const decision = (presentation: Presentation, reason: DecisionReason): Decision => {
+    // Hard guard: only the user's own hide rule may fold a post.
+    if (presentation === 'fold' && rule !== 'hide') presentation = 'advisory';
+    return { presentation, counterfactual, reason };
+  };
+  if (!settings.enabled) return decision('none', 'disabled');
+  if (effectiveMode(settings.scanMode) !== 'manual') return decision('none', target ? 'automatic_folding_blocked' : 'shadow');
+  if (rule === 'keep') return decision('none', 'user_keep');
+  if (rule === 'hide') return decision('fold', 'user_hide');
+  if (settings.debugMode) return decision('diagnostic', 'debug');
+  if (target) return options.disputed ? decision('none', 'disputed') : decision('advisory', 'manual_review');
+  return decision('none', result.status === 'classified' ? 'normal' : 'fail_open');
 }

@@ -2,7 +2,7 @@
   "name": "anti-slop-for-x",
   "private": true,
   "version": "0.9.0",
-  "description": "Detect and fold AI-slop / bot replies on X (x.com)",
+  "description": "Evidence-based content quality assessment for X (x.com)",
   "workspaces": [
     "extension",
     "worker"
@@ -13,7 +13,7 @@
     "zip": "npm run zip -w extension",
     "unpacked": "npm run build && node scripts/sync-unpacked.mjs",
     "release:build": "npm run typecheck && npm run test && npm run zip && node scripts/sync-unpacked.mjs && node scripts/name-release-asset.mjs",
-    "test": "npm run test -w extension",
+    "test": "npm run test -w extension && node --test scripts/tests/evaluate-issue3.test.mjs",
     "typecheck": "npm run typecheck -w extension",
     "worker:dev": "npm run dev -w worker",
     "worker:start": "npm run start -w worker"

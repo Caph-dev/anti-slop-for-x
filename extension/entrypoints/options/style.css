@@ -58,3 +58,7 @@ button {
 }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 #status { color: var(--muted); font-size: 0.9rem; }
+.card > .hint { margin: 4px 0 8px; }
+.status-line { margin-top: 4px; }
+.hint.warn { color: #f4212e; }
+textarea[readonly] { opacity: 0.75; }

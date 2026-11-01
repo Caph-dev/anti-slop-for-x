@@ -1,6 +1,6 @@
 {
   "extName": { "message": "Anti Slop for X" },
   "extDescription": {
-    "message": "检测并折叠 X 上的 AI 注水 / 机器人回复。本地预筛 + 可选决策模型（经自有 Worker 代理）。"
+    "message": "用你自己配置的模型标记 X 上可能的低质量回复（诱导互动、泛泛无关、空洞复述），附原文证据。不会自动屏蔽账号。"
   }
 }

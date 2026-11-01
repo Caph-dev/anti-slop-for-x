@@ -38,7 +38,7 @@
           <legend class="sr-only" id="lblMode"></legend>
           <div class="segmented">
             <label><input type="radio" name="scanMode" value="manual" /><span id="modeManual"></span></label>
-            <label><input type="radio" name="scanMode" value="auto-fold" /><span id="modeFold"></span></label>
+            <label><input type="radio" name="scanMode" value="shadow" /><span id="modeShadow"></span></label>
           </div>
         </fieldset>
         <p class="hint mode-hint" id="modeHint"></p>
@@ -82,6 +82,18 @@
         </span>
         <svg class="chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>
       </button>
+
+      <details class="activity" id="diag">
+        <summary>
+          <span id="lblDiag"></span>
+          <span class="hint" id="diagSummary"></span>
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>
+        </summary>
+        <div class="log-content">
+          <p class="hint diag-hint" id="diagHint"></p>
+          <ul id="diagList" aria-live="polite"></ul>
+        </div>
+      </details>
 
       <details class="activity" id="log">
         <summary>
