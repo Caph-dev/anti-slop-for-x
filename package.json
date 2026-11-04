@@ -13,7 +13,7 @@
     "zip": "npm run zip -w extension",
     "unpacked": "npm run build && node scripts/sync-unpacked.mjs",
     "release:build": "npm run typecheck && npm run test && npm run zip && node scripts/sync-unpacked.mjs && node scripts/name-release-asset.mjs",
-    "test": "npm run test -w extension && node --test scripts/tests/evaluate-issue3.test.mjs",
+    "test": "npm run test -w extension && node --test scripts/tests/evaluate-issue3.test.mjs scripts/tests/name-release-asset.test.mjs",
     "typecheck": "npm run typecheck -w extension",
     "worker:dev": "npm run dev -w worker",
     "worker:start": "npm run start -w worker"

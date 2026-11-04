@@ -20,7 +20,7 @@
    ```
 
    它依次执行 `typecheck` → `test` → `zip` → 镜像到 `unpacked/chrome-mv3` → 把 zip 重命名为 `extension/.output/vX.Y.Z.zip`。
-   **release 资产名一律是 `vX.Y.Z.zip`**，不带产品名。`scripts/name-release-asset.mjs` 负责改名，并保证 `extension/.output` 里只留一个 zip。
+   **release 资产名一律是 `vX.Y.Z.zip`**，不带产品名。`scripts/name-release-asset.mjs` 按 zip 内部 `manifest.json` 的 version 挑出当前版本的产物改名，保证 `extension/.output` 顶层只留一个 zip；其他版本的残留与同版本旧资产会被归档到 `extension/.output/stale/`（重名加 `-2` 等后缀，不删除），不要手动改回。
    **zip 与 unpacked 必须出自同一次构建**，所以不要用「先 `npm run unpacked` 再单独 zip」的顺序手动拼，直接跑这一条。
 
 4. **提交 → 打 tag → push → 建 release**：

@@ -1,5 +1,27 @@
 # Changelog
 
+## 未发布 / Unreleased
+
+修复发布脚本在 `extension/.output` 残留上一版 zip 时让整个 `release:build` 失败的问题。不影响扩展行为。
+Fixed the release script failing the whole `release:build` when a previous release's zip was still in `extension/.output`. No change to extension behaviour.
+
+- `scripts/name-release-asset.mjs` 改为按内容选资产：读出每个 zip 内部 `manifest.json` 的 version，只有等于 `package.json` 版本的产物才会被改名成 `vX.Y.Z.zip`，不再靠文件名猜。
+- The script now selects by content: it reads each zip's own `manifest.json` version, and only the artifact matching `package.json`'s version is renamed to `vX.Y.Z.zip`; it no longer guesses from filenames.
+- 归档而非删除：其他版本的残留 zip、以及同版本的旧资产，都被移进 `extension/.output/stale/`，重名时加 `-2`、`-3` 后缀，任何旧字节都不会被覆盖或丢弃。
+- Archive instead of delete: leftover zips for other versions, and the previous asset of the same version, are moved into `extension/.output/stale/` with a `-2`/`-3` suffix on collision, so no earlier bytes are overwritten or discarded.
+- 只有「多于一个未命名的当前版本候选」才算歧义并失败；唯一的候选会替换已命名的旧资产（旧资产先入归档）。
+- Only "more than one unnamed candidate for the current version" counts as ambiguous and fails; a single candidate replaces the already-named asset, whose bytes are archived first.
+- 归档名从不复用：占用判断用 `lstat`，悬空链接的目录项也算占用，会改用 `-2` 而非被覆盖。
+- Archived names are never reused: occupancy is decided with `lstat`, so even a dangling link keeps its directory entry and the newcomer takes a `-2` suffix instead.
+- 读不到 manifest 的 zip（损坏、不是 zip、或尾部有额外数据）、一个 zip 里有两份根 `manifest.json` 都直接报错且不动文件，不当作「旧版」移走。顶层 zip 的符号链接，以及需要归档时发现 `stale/` 不是真实目录（含悬空链接），同样报错。
+- A zip whose manifest cannot be read (corrupt, not a zip, or followed by trailing bytes) and an archive holding two root `manifest.json` entries are errors that leave every file in place, never treated as stale. A symlinked top-level zip, or a `stale/` that is not a plain directory (dangling links included) when archiving is needed, is refused as well.
+- 新增 `scripts/tests/name-release-asset.test.mjs`（18 个用例：store / deflate、歧义、损坏、缺 manifest、重复 manifest、符号链接与悬空链接、归档重名、替换后的字节比对、幂等与缺失场景），并入 `npm test`。
+- Added `scripts/tests/name-release-asset.test.mjs` (18 cases: stored and deflated archives, ambiguity, corruption, missing and duplicate manifests, symlinks and dangling links, archive name collisions, byte-level checks after replacement, idempotency and missing-build paths), wired into `npm test`.
+- 该缺陷在 v0.10.0 发布时实际触发（`Expected one zip, found 2: …0.10.0-chrome.zip, v0.9.0.zip`）。修复后在真实 `.output` 重放同一场景：残留 `v0.9.0.zip` 归档到 `stale/`，产物改名为 `v0.10.0.zip`，exit 0；`npm run release:build` 连跑两次均 exit 0。
+- The defect actually fired during the v0.10.0 release (`Expected one zip, found 2`). After the fix the same scenario was replayed in the real `.output`: the leftover zip was archived into `stale/`, the artifact was renamed, exit 0, and `npm run release:build` twice in a row exited 0.
+- 限制：这个 zip 解析器只是为了读出受信任 WXT 产物的版本，不校验 CRC、不支持 zip64，读成功不等于归档完整。
+- Limitation: the zip reader exists only to read a version out of a trusted WXT artifact. It does not verify checksums, does not support zip64, and a successful read is not a statement about archive integrity.
+
 ## 0.10.0 — 2026-11-04
 
 判定轴从「作者来源」改为「给定上下文里的内容质量」，自动折叠与自动屏蔽改为影子评测加用户可控的呈现。
