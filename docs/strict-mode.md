@@ -1,6 +1,6 @@
 # Strict mode（已关闭）
 
-Strict 模式在 v0.7.0 时关闭。未发布的 issue #3 改动没有接入自动屏蔽路径，也没有 `STRICT_ENABLED` 启动开关；旧 `strict` 设置按「仅记录」运行。当前决策见 [ROADMAP](../ROADMAP.md) 和 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。
+Strict 模式在 v0.7.0 时关闭。v0.10.0 的改动没有接入自动屏蔽路径，也没有 `STRICT_ENABLED` 启动开关；旧 `strict` 设置按「仅记录」运行。当前决策见 [ROADMAP](../ROADMAP.md) 和 [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2)。
 
 下文是 v0.7.0 之前的历史设计与验证记录，不描述当前代码，也不是重新开启的操作指南。
 

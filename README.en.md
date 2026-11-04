@@ -4,7 +4,7 @@ Judges the quality of posts on X (x.com) in their context and marks suspicious c
 
 [中文](README.md) · [CHANGELOG](CHANGELOG.md) · [Architecture](docs/architecture.md)
 
-The published version is v0.9.0. The issue #3 work described here is unreleased; build this source branch to try it. The existing release behaves differently. The build targets Chrome MV3, but the full browser extension flow has not been validated and the extension is not on the Chrome Web Store.
+The published version is v0.10.0, and this document describes that version. The build targets Chrome MV3, but the full browser extension flow has not been validated, classification quality has no labelled-dataset evaluation, and the extension is not on the Chrome Web Store.
 
 ## Layout
 
@@ -28,13 +28,13 @@ The extension ships no key and relays no traffic. You supply your own endpoint a
 
 ## Install
 
-These release instructions install the published version, which behaves differently from the unreleased work described here. To try this branch, see [Development](#development).
+These release instructions install the published version. To build from source, see [Development](#development).
 
 1. Open [Releases](https://github.com/Caph-dev/anti-slop-for-x/releases) and download the zip asset for the published version.
 2. Unzip it into a fixed directory, for example `~/Extensions/anti-slop-for-x`.
 3. Open `chrome://extensions` and turn on Developer mode.
 4. Click "Load unpacked" and select the unzipped directory.
-5. Open the extension options page and configure an endpoint and key supported by that release. OpenAI Responses is not available in v0.9.0.
+5. Open the extension options page, select OpenAI Responses and enter a model name and key. Jev and Decisions remain selectable, but they cannot return checkable evidence and send no request when chosen.
 6. Open any x.com page, click the toolbar icon, and confirm the panel opens.
 
 To upgrade, download the new zip, unzip it over the same directory, and click the reload button on the extension card. Chrome treats a different path as a different extension, so keep the directory where it is.
@@ -164,7 +164,7 @@ npm install
 npm run unpacked
 ```
 
-`npm run unpacked` builds first, then mirrors the build into `unpacked/chrome-mv3`, which is the directory Chrome loads. For this unreleased branch, select OpenAI Responses in the options page and enter an endpoint, model and key. After a code change, run the command again and click the reload button on the extension card.
+`npm run unpacked` builds first, then mirrors the build into `unpacked/chrome-mv3`, which is the directory Chrome loads. In the options page, select OpenAI Responses and enter an endpoint, model and key. After a code change, run the command again and click the reload button on the extension card.
 
 | Command | Effect |
 |---|---|

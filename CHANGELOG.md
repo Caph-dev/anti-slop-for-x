@@ -1,9 +1,9 @@
 # Changelog
 
-## 未发布 / Unreleased
+## 0.10.0 — 2026-11-04
 
-判定轴从「作者来源」改为「给定上下文里的内容质量」，自动折叠与自动屏蔽改为影子评测加用户可控的呈现。未改版本号。
-The axis moved from authorship to content quality in the supplied context; automatic folding and automatic blocking became shadow evaluation plus user-controlled presentation. No version bump.
+判定轴从「作者来源」改为「给定上下文里的内容质量」，自动折叠与自动屏蔽改为影子评测加用户可控的呈现。
+The axis moved from authorship to content quality in the supplied context; automatic folding and automatic blocking became shadow evaluation plus user-controlled presentation.
 
 - 新增内容质量识别：`normal`、`engagement_bait`、`generic_irrelevant`、`content_free_restatement`，无法判断时弃权。短、带情绪、口语、正式、非母语、中日韩文本本身都不构成任何类别，风格也不再当作来源证据。类别定义见 `docs/content-taxonomy.md`。
 - Added content-quality recognition: `normal`, `engagement_bait`, `generic_irrelevant`, `content_free_restatement`, and abstention when the evidence is insufficient. Short, emotional, colloquial, formal, non-native and CJK text is not a category by itself, and style is no longer treated as evidence of origin. Categories are defined in `docs/content-taxonomy.md`.

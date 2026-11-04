@@ -4,7 +4,7 @@
 
 [English](README.en.md) · [CHANGELOG](CHANGELOG.md) · [架构说明](docs/architecture.md)
 
-已发布版本 v0.9.0。本文描述的 issue #3 改动尚未发布，需要从当前源码构建才能试用；旧版 release 的行为不同。目前只构建 Chrome MV3，完整浏览器扩展流程尚未验证，也未上架 Chrome Web Store。
+已发布版本 v0.10.0，本文描述的就是这个版本的行为。目前只构建 Chrome MV3，完整浏览器扩展流程尚未验证，分类质量也未经标注数据集评估，也未上架 Chrome Web Store。
 
 ## 目录结构
 
@@ -28,13 +28,13 @@ ROADMAP.md  计划中与暂时关闭的功能
 
 ## 安装
 
-以下 release 安装步骤适用于已发布版本，其功能与本文所述的未发布改动不同。要试用本分支，参见[开发](#开发)。
+以下 release 安装步骤适用于已发布版本。要从源码构建，参见[开发](#开发)。
 
 1. 打开 [Releases](https://github.com/Caph-dev/anti-slop-for-x/releases)，下载已发布版本的 zip 资产。
 2. 解压到一个固定的目录，比如 `~/Extensions/anti-slop-for-x`。
 3. 打开 `chrome://extensions`，启用开发者模式。
 4. 点「加载已解压的扩展程序」，选择解压后的目录。
-5. 打开扩展选项页，配置该发布版本支持的 endpoint 和 key。v0.9.0 不支持 OpenAI Responses。
+5. 打开扩展选项页，选择 OpenAI Responses 并填写模型名和 key。Jev 与 Decisions 仍可选，但它们无法返回可核对的证据，选中后不会发送任何请求。
 6. 打开任意 x.com 页面，点工具栏图标，确认面板能打开。
 
 升级时下载新 zip，解压覆盖同一个目录，再到扩展页点一次刷新按钮。目录换了位置，Chrome 会把它当成另一个扩展，所以保持路径不变。
@@ -164,7 +164,7 @@ npm install
 npm run unpacked
 ```
 
-`npm run unpacked` 先构建，再把产物镜像到 `unpacked/chrome-mv3`，Chrome 加载这个目录。试用本未发布分支时，在选项页选择 OpenAI Responses 并填写 endpoint、模型和 key。改完代码重跑这条命令，再到扩展页点刷新。
+`npm run unpacked` 先构建，再把产物镜像到 `unpacked/chrome-mv3`，Chrome 加载这个目录。在选项页选择 OpenAI Responses 并填写 endpoint、模型和 key。改完代码重跑这条命令，再到扩展页点刷新。
 
 | 命令 | 作用 |
 |---|---|

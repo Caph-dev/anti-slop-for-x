@@ -4,7 +4,7 @@ What is planned, what is shelved, and why. Each item links to its issue.
 
 ## Shelved
 
-- **Strict mode (automatic blocking)** [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2). The historical score-based implementation was switched off in v0.7.0. In the unreleased issue #3 work, no automatic blocking path or enabling switch is wired into recognition; legacy `strict` settings act as record-only. Any future design needs a separate decision and real-browser verification. Historical guardrails and TLA+ findings are in [docs/strict-mode.md](docs/strict-mode.md).
+- **Strict mode (automatic blocking)** [issue #2](https://github.com/Caph-dev/anti-slop-for-x/issues/2). The historical score-based implementation was switched off in v0.7.0. In the v0.10.0 work, no automatic blocking path or enabling switch is wired into recognition; legacy `strict` settings act as record-only. Any future design needs a separate decision and real-browser verification. Historical guardrails and TLA+ findings are in [docs/strict-mode.md](docs/strict-mode.md).
 
 ## Known gaps, not yet planned
 
